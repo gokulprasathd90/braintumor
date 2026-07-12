@@ -1,0 +1,4 @@
+# This directory stores trained model artifacts.
+# edn_svm.json — saved after running: node training/train.js
+# nn_weights/   — TensorFlow.js SavedModel weights directory
+# These files are excluded from git via .gitignore

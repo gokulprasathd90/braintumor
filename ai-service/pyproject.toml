@@ -1,0 +1,16 @@
+[project]
+name = "brain-tumor-ai-service"
+version = "1.0.0"
+description = "Python / TensorFlow AI service for brain tumour MRI classification"
+requires-python = ">=3.10,<3.14"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]

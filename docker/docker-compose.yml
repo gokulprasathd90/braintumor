@@ -1,0 +1,14 @@
+# docker-compose.yml — Container Orchestration
+#
+# Services:
+#  backend  — Node.js + Express API server (port 5000)
+#  frontend — Nginx serving React build (port 3000)
+#
+# Shared volumes:
+#  dataset_volume — shared between backend containers for MRI images
+#  models_volume  — shared for trained EDN-SVM model artifacts
+#
+# Networks:
+#  app_network — internal bridge network between services
+
+# TODO: Implement in deployment phase

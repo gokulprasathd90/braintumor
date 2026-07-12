@@ -1,0 +1,18 @@
+# Dockerfile.backend — Node.js Backend Container
+#
+# Build stages:
+#  1. Base: node:18-slim
+#  2. Set working directory: /app
+#  3. Copy package.json and install production dependencies
+#  4. Copy all backend source files
+#  5. Expose port 5000
+#  6. Run database migration on startup
+#  7. CMD: node server.js
+#
+# Notes:
+#  - @tensorflow/tfjs-node requires build tools (python3, make, g++)
+#    → Use node:18 (full image) not slim for TF.js native bindings
+#  - Upload directory created on container start
+#  - Environment variables passed via docker-compose.yml
+
+# TODO: Implement in deployment phase

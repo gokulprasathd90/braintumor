@@ -1,0 +1,17 @@
+# Dockerfile.frontend — React Frontend Container
+#
+# Multi-stage build:
+#
+# Stage 1 — Builder (node:18-slim):
+#  1. Set working directory: /app
+#  2. Copy package.json, install all dependencies
+#  3. Copy frontend source
+#  4. Run: npm run build → outputs to /app/dist
+#
+# Stage 2 — Serve (nginx:alpine):
+#  1. Copy /app/dist from builder stage to /usr/share/nginx/html
+#  2. Copy nginx.conf for SPA routing (all routes → index.html)
+#  3. Expose port 80
+#  4. CMD: nginx -g 'daemon off;'
+
+# TODO: Implement in deployment phase

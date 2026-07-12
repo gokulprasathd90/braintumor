@@ -1,0 +1,37 @@
+# Node modules
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Environment variables
+.env
+backend/.env
+
+# Dataset raw images (large files, not committed)
+dataset/raw/
+dataset/processed/
+dataset/features/
+
+# Uploaded runtime files
+uploads/*
+!uploads/.gitkeep
+
+# Trained model artifacts
+backend/models/*.json
+backend/models/*.pkl
+!backend/models/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# Build output
+frontend/dist/
+frontend/.vite/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
