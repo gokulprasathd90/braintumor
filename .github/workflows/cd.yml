@@ -1,0 +1,163 @@
+# ─── .github/workflows/cd.yml ─────────────────────────────────────────────────
+#
+# Continuous Deployment — Brain Tumour Detection
+#
+# Triggers:
+#   push to main             → deploy to staging
+#   release published        → deploy to production
+#   workflow_dispatch        → manual deploy to any environment
+#
+# Required secrets:
+#   DEPLOY_HOST_STAGING      — staging server SSH hostname / IP
+#   DEPLOY_HOST_PRODUCTION   — production server SSH hostname / IP
+#   DEPLOY_USER              — SSH username (e.g. deploy)
+#   DEPLOY_SSH_KEY           — private SSH key (PEM format)
+#   DEPLOY_PATH              — remote path (e.g. /opt/brain-tumor)
+#   JWT_SECRET_KEY           — production JWT secret (64+ chars)
+#   DB_ENCRYPTION_KEY        — database encryption key
+#   SLACK_WEBHOOK            — Slack notification URL (optional)
+
+name: CD
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+      version:
+        description: "Image tag / version to deploy (default: latest)"
+        required: false
+        default: "latest"
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false    # never cancel a running deployment
+
+env:
+  REGISTRY:    ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── Determine target environment ───────────────────────────────────────────
+  setup:
+    name: "CD · Setup"
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      version:     ${{ steps.env.outputs.version }}
+      deploy_host: ${{ steps.env.outputs.deploy_host }}
+
+    steps:
+      - name: Resolve environment and version
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            ENV=production
+            VERSION="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            ENV=staging
+            VERSION="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
+          fi
+          echo "environment=$ENV"   >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "Deploying $VERSION to $ENV"
+
+  # ── Deploy ─────────────────────────────────────────────────────────────────
+  deploy:
+    name: "CD · Deploy to ${{ needs.setup.outputs.environment }}"
+    runs-on: ubuntu-latest
+    needs: [setup]
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare compose files
+        run: |
+          VERSION="${{ needs.setup.outputs.version }}"
+          ENV="${{ needs.setup.outputs.environment }}"
+          # Substitute version tag into compose files
+          sed -i "s|APP_VERSION:-latest|APP_VERSION:-$VERSION|g" \
+            docker/docker-compose.yml
+
+      - name: Copy compose files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          source:   "docker/docker-compose.yml,docker/docker-compose.prod.yml,docker/nginx/"
+          target:   ${{ secrets.DEPLOY_PATH }}
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST_STAGING }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            # Pull the new images
+            docker compose \
+              -f docker/docker-compose.yml \
+              -f docker/docker-compose.prod.yml \
+              pull
+
+            # Rolling update — new containers start before old ones stop
+            docker compose \
+              -f docker/docker-compose.yml \
+              -f docker/docker-compose.prod.yml \
+              up -d --no-build \
+              --remove-orphans
+
+            # Verify health
+            sleep 30
+            docker compose -f docker/docker-compose.yml ps
+
+            # Prune old images (keep last 2)
+            docker image prune -f --filter "until=48h"
+
+      - name: Smoke test
+        run: |
+          sleep 15
+          HOST="${{ secrets.DEPLOY_HOST_STAGING }}"
+          if ! curl -sf "http://${HOST}:8000/api/v1/health" | grep -q '"status":"ok"'; then
+            echo "AI service health check failed"
+            exit 1
+          fi
+          echo "Smoke test passed"
+
+      - name: Notify Slack on success
+        if: success() && secrets.SLACK_WEBHOOK != ''
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+            -H 'Content-type: application/json' \
+            -d '{
+              "text": ":white_check_mark: *Brain Tumour Detection* deployed `${{ needs.setup.outputs.version }}` to *${{ needs.setup.outputs.environment }}*",
+              "username": "GitHub Actions"
+            }'
+
+      - name: Notify Slack on failure
+        if: failure() && secrets.SLACK_WEBHOOK != ''
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+            -H 'Content-type: application/json' \
+            -d '{
+              "text": ":x: *Brain Tumour Detection* deployment of `${{ needs.setup.outputs.version }}` to *${{ needs.setup.outputs.environment }}* FAILED",
+              "username": "GitHub Actions"
+            }'

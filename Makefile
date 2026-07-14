@@ -167,9 +167,23 @@ docker-up:  ## Build and start all containers in the background
 	@echo "    AI Service→ http://localhost:8000"
 	@echo "    API Docs  → http://localhost:8000/docs"
 
-docker-up-dev:  ## Start containers with bind-mounted source (faster iteration)
-	@$(COMPOSE) -f $(DOCK)/docker-compose.yml \
-	            -f $(DOCK)/docker-compose.dev.yml up --build -d
+docker-up-dev:  ## Start containers with bind-mounted source (hot-reload)
+	@echo -e "$(CYAN)→ Starting development stack...$(NC)"
+	@docker compose -f $(DOCK)/docker-compose.yml \
+	                -f $(DOCK)/docker-compose.dev.yml up --build -d
+	@echo -e "$(GREEN)✓ Dev stack running:$(NC)"
+	@echo "    Frontend HMR  → http://localhost:5173"
+	@echo "    Backend       → http://localhost:5000"
+	@echo "    AI Service    → http://localhost:8000"
+
+docker-up-prod:  ## Start production stack with resource limits and secrets
+	@echo -e "$(CYAN)→ Starting production stack...$(NC)"
+	@docker compose -f $(DOCK)/docker-compose.yml \
+	                -f $(DOCK)/docker-compose.prod.yml up --build -d
+	@echo -e "$(GREEN)✓ Production stack running:$(NC)"
+	@echo "    App     → http://localhost:3000"
+	@echo "    Backend → http://localhost:5000"
+	@echo "    AI      → http://localhost:8000"
 
 docker-down:  ## Stop and remove containers (keeps volumes)
 	@echo -e "$(CYAN)→ Stopping containers...$(NC)"
@@ -247,6 +261,44 @@ migrate:  ## Run SQLite database migrations (backend)
 lint-ai:  ## Lint Python source with ruff (install separately: pip install ruff)
 	@echo -e "$(CYAN)→ Linting AI service...$(NC)"
 	@cd $(AI) && source .venv/bin/activate && ruff check app/ tests/
+
+lint-frontend:  ## Lint frontend TypeScript with ESLint + Prettier check
+	@echo -e "$(CYAN)→ Linting frontend...$(NC)"
+	@cd $(FE) && npm run lint && npm run format:check
+
+lint-backend:  ## Lint backend JavaScript with ESLint
+	@echo -e "$(CYAN)→ Linting backend...$(NC)"
+	@cd $(BE) && npm run lint --if-present
+
+lint: lint-ai lint-frontend lint-backend  ## Lint all three services
+
+format-ai:  ## Auto-format Python source with ruff + black + isort
+	@echo -e "$(CYAN)→ Formatting AI service...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& ruff check --fix app/ tests/ \
+		&& black app/ tests/ \
+		&& isort app/ tests/
+
+format-frontend:  ## Auto-format frontend code with Prettier
+	@echo -e "$(CYAN)→ Formatting frontend...$(NC)"
+	@cd $(FE) && npm run format
+
+format: format-ai format-frontend  ## Format all code
+
+deploy-staging:  ## Deploy to staging using deploy.sh
+	@./scripts/deploy.sh --env staging
+
+deploy-prod:  ## Deploy to production using deploy.sh (requires --version)
+	@./scripts/deploy.sh --env production
+
+deploy-status:  ## Show current deployment status
+	@./scripts/deploy.sh --status
+
+backup:  ## Backup all Docker volumes
+	@./scripts/backup.sh
+
+validate-env:  ## Validate all environment files
+	@./scripts/validate-env.sh
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATASET

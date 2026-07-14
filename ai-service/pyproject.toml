@@ -10,7 +10,102 @@ license = { text = "MIT" }
 where = ["."]
 include = ["app*"]
 
+# ─── pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths    = ["tests"]
 asyncio_mode = "auto"
-pythonpath = ["."]
+pythonpath   = ["."]
+addopts      = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "-p", "no:warnings",
+]
+markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
+    "integration: marks tests requiring external services",
+    "deployment: marks deployment validation tests",
+]
+
+# ─── coverage ─────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source       = ["app"]
+omit         = ["app/*/migrations/*", "tests/*", "*/__init__.py"]
+branch       = true
+
+[tool.coverage.report]
+skip_empty   = true
+show_missing = true
+precision    = 2
+fail_under   = 70
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# ─── ruff ─────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length    = 100
+src            = ["app", "tests"]
+exclude        = [
+    ".git", ".venv", "__pycache__", ".pytest_cache",
+    "*.egg-info", "dist", "build",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (security)
+    "T20",  # flake8-print
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "S101",   # assert usage (acceptable in tests)
+    "S106",   # hardcoded password (false positives in tests)
+    "S311",   # standard pseudo-random (acceptable for non-crypto)
+    "T201",   # print statements (needed in scripts)
+    "B008",   # function call as default argument (FastAPI Depends pattern)
+    "RUF012", # mutable class attribute (Pydantic models)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S", "T20", "B"]
+"app/core/config.py" = ["S105"]   # possible hardcoded password in defaults
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+# ─── black ────────────────────────────────────────────────────────────────────
+[tool.black]
+target-version = ["py312"]
+line-length    = 100
+include        = '\.pyi?$'
+exclude        = '''
+/(
+    \.git
+  | \.venv
+  | __pycache__
+  | \.pytest_cache
+  | dist
+  | build
+)/
+'''
+
+# ─── isort ────────────────────────────────────────────────────────────────────
+[tool.isort]
+profile            = "black"
+line_length        = 100
+known_first_party  = ["app"]
+skip_glob          = [".venv/*", "*.egg-info"]

@@ -100,3 +100,36 @@ coverage/
 *.tmp
 *.bak
 *.orig
+
+# ─── Module 10: Deployment & CI/CD additions ──────────────────────────────────
+
+# Docker secrets (production secret files — never commit)
+docker/secrets/*.txt
+docker/secrets/*.key
+docker/secrets/*.pem
+# Keep the gitkeep and README
+!docker/secrets/.gitkeep
+!docker/secrets/README.md
+
+# Deployment backups
+.backups/
+
+# Deployment logs
+logs/deploy-*.log
+
+# Pre-commit
+.secrets.baseline
+
+# Production env templates with real values
+ai-service/.env.local
+*.env.local
+
+# Release artifacts
+RELEASE_NOTES.md
+CHANGELOG.md.tmp
+
+# Trivy scan results
+trivy-*.sarif
+
+# Docker compose local overrides
+docker/docker-compose.local.yml
