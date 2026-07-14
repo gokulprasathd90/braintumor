@@ -13,8 +13,9 @@ const ACCEPTED = { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] };
  *    and a progress callback fn(percent: number).
  *    Should return a Promise that resolves on success or rejects with an Error.
  *  isLoading {boolean} — disables interaction during upload
+ *  autoSubmit {boolean} — call onUpload immediately on file selection (no button click needed)
  */
-export default function UploadPanel({ onUpload, isLoading = false }) {
+export default function UploadPanel({ onUpload, isLoading = false, autoSubmit = false }) {
   const [file, setFile]         = useState(null);
   const [preview, setPreview]   = useState(null);
   const [dropError, setDropError] = useState('');
@@ -47,7 +48,17 @@ export default function UploadPanel({ onUpload, isLoading = false }) {
 
     setFile(selected);
     setPreview(url);
-  }, []);
+
+    // Auto-submit: call onUpload immediately without needing the button click
+    if (autoSubmit && onUpload) {
+      setUploading(true);
+      setProgress(0);
+      onUpload(selected, (percent) => setProgress(percent))
+        .then(() => setProgress(100))
+        .catch(() => setProgress(0))
+        .finally(() => setUploading(false));
+    }
+  }, [autoSubmit, onUpload]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -115,7 +126,7 @@ export default function UploadPanel({ onUpload, isLoading = false }) {
           ${busy ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''}
         `}
       >
-        <input {...getInputProps()} aria-label="Upload MRI image" />
+        <input {...getInputProps()} aria-label="Upload MRI via dropzone" />
 
         {preview ? (
           /* ── Preview state ─────────────────────────────────────────────── */

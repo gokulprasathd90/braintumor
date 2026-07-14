@@ -24,10 +24,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routes import router
+from app.api.auth_routes import auth_router
 from app.core.config import settings
 from app.core.logging import logger
+from app.security.rate_limit import limiter
 
 
 # ─── Lifespan (startup / shutdown) ───────────────────────────────────────────
@@ -48,9 +53,20 @@ async def lifespan(app: FastAPI):
     logger.info(f"  Image size  : {settings.image_size}×{settings.image_size}")
     logger.info("=" * 60)
 
-    # TODO: pre-load model weights here once implemented
-    # from app.models.load_model import load_keras_model
-    # load_keras_model(settings.active_model)
+    # Pre-load the active model into cache if weights are available.
+    # A missing model is non-fatal at startup — the /train endpoint creates one.
+    from app.models.load_model import is_model_available, load_keras_model
+    if is_model_available(settings.active_model):
+        try:
+            load_keras_model(settings.active_model)
+            logger.info(f"Active model '{settings.active_model}' pre-loaded into cache.")
+        except Exception as exc:
+            logger.warning(f"Could not pre-load model '{settings.active_model}': {exc}")
+    else:
+        logger.info(
+            f"No saved weights found for '{settings.active_model}'. "
+            "Use POST /api/v1/train to train the model first."
+        )
 
     logger.info("AI Service startup complete — ready to accept requests.")
 
@@ -78,6 +94,11 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
+
+    # ── Rate limiter ──────────────────────────────────────────────────────────
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     app.add_middleware(
@@ -119,6 +140,7 @@ def create_app() -> FastAPI:
     # ── Routes ────────────────────────────────────────────────────────────────
     # All AI endpoints are prefixed with /api/v1
     app.include_router(router, prefix="/api/v1")
+    app.include_router(auth_router, prefix="/api/v1")
 
     return app
 

@@ -84,6 +84,34 @@ class Settings(BaseSettings):
     # ── Grad-CAM output ───────────────────────────────────────────────────────
     gradcam_output_dir: Path = BASE_DIR / "gradcam_output"
 
+    # ── Security / JWT ────────────────────────────────────────────────────────
+    # Secret key for JWT signing — override with a strong random value in prod.
+    jwt_secret_key: str = "change-me-in-production-use-a-long-random-secret"
+    jwt_algorithm: str  = "HS256"
+    # Access token lifetime in minutes (default 30 min)
+    access_token_expire_minutes: int = 30
+    # Refresh token lifetime in days (default 7 days)
+    refresh_token_expire_days: int = 7
+    # bcrypt rounds — 12 in production; lower in tests via env override
+    bcrypt_rounds: int = 12
+
+    # Prediction endpoint auth: "public" | "authenticated"
+    prediction_auth_mode: str = "public"
+
+    # Rate limits (requests per minute)
+    rate_limit_login: int = 5
+    rate_limit_prediction: int = 60
+    rate_limit_batch_prediction: int = 10
+    rate_limit_training: int = 5
+    rate_limit_dashboard: int = 120
+
+    # Audit log directory
+    audit_log_dir: Path = BASE_DIR / "logs" / "audit"
+
+    # Account lockout — max consecutive failed logins before 15-min lockout
+    max_failed_logins: int = 5
+    lockout_minutes: int = 15
+
     # ── Logging ───────────────────────────────────────────────────────────────
     log_level: str = "INFO"
     log_dir: Path  = BASE_DIR / "logs"
@@ -115,3 +143,4 @@ settings.log_dir.mkdir(parents=True, exist_ok=True)
 settings.dataset_raw_dir.mkdir(parents=True, exist_ok=True)
 settings.dataset_processed_dir.mkdir(parents=True, exist_ok=True)
 settings.gradcam_output_dir.mkdir(parents=True, exist_ok=True)
+settings.audit_log_dir.mkdir(parents=True, exist_ok=True)

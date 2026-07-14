@@ -35,6 +35,13 @@ pydantic-settings==2.6.1
 # ─── Logging / Monitoring ─────────────────────────────────────────────────────
 loguru==0.7.3
 
+# ─── Security / Authentication ────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0   # JWT encode / decode
+passlib[bcrypt]==1.7.4             # password hashing (bcrypt)
+bcrypt==4.0.1                      # explicit bcrypt pin (passlib backend)
+slowapi==0.1.9                     # rate limiting (Starlette-compatible)
+limits==3.13.0                     # slowapi backend
+
 # ─── Testing ──────────────────────────────────────────────────────────────────
 pytest==8.3.3
 pytest-asyncio==0.24.0

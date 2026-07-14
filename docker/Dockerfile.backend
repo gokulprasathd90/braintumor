@@ -1,18 +1,65 @@
-# Dockerfile.backend — Node.js Backend Container
+# ─── docker/Dockerfile.backend ────────────────────────────────────────────────
 #
-# Build stages:
-#  1. Base: node:18-slim
-#  2. Set working directory: /app
-#  3. Copy package.json and install production dependencies
-#  4. Copy all backend source files
-#  5. Expose port 5000
-#  6. Run database migration on startup
-#  7. CMD: node server.js
+# Node.js / Express backend — production image.
 #
-# Notes:
-#  - @tensorflow/tfjs-node requires build tools (python3, make, g++)
-#    → Use node:18 (full image) not slim for TF.js native bindings
-#  - Upload directory created on container start
-#  - Environment variables passed via docker-compose.yml
+# Build context must be the repo root so the backend/ directory is in scope:
+#   docker build -f docker/Dockerfile.backend -t brain-tumor-backend:latest .
+#
+# Or let docker-compose handle it (context: . is set in docker-compose.yml).
 
-# TODO: Implement in deployment phase
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Copy manifest files first to exploit layer caching
+COPY backend/package.json backend/package-lock.json ./
+
+# Install ALL deps (including devDependencies) so native modules compile
+RUN npm ci --include=dev
+
+# ──────────────────────────────────────────────────────────────────────────────
+FROM node:20-slim AS runtime
+
+LABEL org.opencontainers.image.title="Brain Tumour Detection — Backend API" \
+      org.opencontainers.image.version="1.0.0"
+
+# better-sqlite3 requires these at runtime for its native .node binding
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy production node_modules from builder (no devDependencies in final image)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy all backend source files
+COPY backend/ .
+
+# Create upload and log directories — these are bind-mounted in docker-compose
+# but the directories must exist in the image as a fallback.
+RUN mkdir -p \
+        ../uploads \
+        ../logs \
+        ./database
+
+# Non-root user
+RUN useradd --no-create-home --shell /bin/false appuser \
+ && chown -R appuser:appuser /app /uploads 2>/dev/null || true
+USER appuser
+
+# ── Environment defaults ──────────────────────────────────────────────────────
+ENV NODE_ENV=production \
+    PORT=5000 \
+    HOST=0.0.0.0 \
+    LOG_LEVEL=info
+
+EXPOSE 5000
+
+STOPSIGNAL SIGTERM
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:5000/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"
+
+# Run migrations then start the server
+CMD ["sh", "-c", "node database/migrate.js && node server.js"]

@@ -1,4 +1,9 @@
-"""Tests for third-party and application module imports."""
+"""
+tests/test_imports.py — Smoke tests verifying all modules import cleanly.
+
+If any import fails here the service cannot start, so this is the fastest
+signal that a dependency is missing or a module has a syntax error.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +23,6 @@ THIRD_PARTY = [
     "matplotlib",
     "sklearn",
     "PIL",
-    "tf_explain",
     "dotenv",
     "pydantic",
     "pydantic_settings",
@@ -26,15 +30,24 @@ THIRD_PARTY = [
 ]
 
 APP_MODULES = [
+    # Core
     "app.core.config",
     "app.core.logging",
+    # Application
     "app.main",
     "app.api.routes",
+    # Preprocessing
+    "app.preprocessing.preprocess",
+    "app.preprocessing",
+    # Models
+    "app.models.architectures",
     "app.models.train",
     "app.models.predict",
     "app.models.evaluate",
     "app.models.load_model",
     "app.models.save_model",
+    # Utils
+    "app.utils.gradcam",
 ]
 
 

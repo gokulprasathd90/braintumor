@@ -1,37 +1,102 @@
-# Node modules
+# ─── Node ─────────────────────────────────────────────────────────────────────
 node_modules/
 backend/node_modules/
 frontend/node_modules/
 
-# Environment variables
+# ─── Environment variables (contain secrets — never commit) ───────────────────
 .env
+.env.local
+.env.*.local
 backend/.env
+frontend/.env.local
+ai-service/.env
+# .env.example files ARE committed (safe defaults, no secrets)
 
-# Dataset raw images (large files, not committed)
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# MyPy / type-checkers
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# ─── Dataset — large binary files not tracked by git ─────────────────────────
 dataset/raw/
 dataset/processed/
 dataset/features/
+ai-service/dataset/raw/
+ai-service/dataset/processed/
 
-# Uploaded runtime files
-uploads/*
-!uploads/.gitkeep
-
-# Trained model artifacts
+# ─── Model artefacts — binary weights not tracked by git ─────────────────────
+ai-service/saved_models/*/
+!ai-service/saved_models/.gitkeep
 backend/models/*.json
 backend/models/*.pkl
 !backend/models/.gitkeep
 
-# Logs
+# ─── Runtime outputs ──────────────────────────────────────────────────────────
+uploads/
+!uploads/.gitkeep
+ai-service/gradcam_output/
+!ai-service/gradcam_output/.gitkeep
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 logs/
 *.log
+ai-service/logs/
 
-# Build output
+# ─── Frontend build ───────────────────────────────────────────────────────────
 frontend/dist/
 frontend/.vite/
 
-# OS files
-.DS_Store
-Thumbs.db
+# ─── Docker ───────────────────────────────────────────────────────────────────
+# Docker override files with local secrets
+docker-compose.override.yml
+docker-compose.local.yml
 
+# ─── Editors & OS ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
 # Test coverage
 coverage/
+# Temporary files
+*.tmp
+*.bak
+*.orig

@@ -1,14 +1,165 @@
-# docker-compose.yml — Container Orchestration
+# docker/docker-compose.yml
 #
-# Services:
-#  backend  — Node.js + Express API server (port 5000)
-#  frontend — Nginx serving React build (port 3000)
+# Orchestrates all three services for local development and production.
 #
-# Shared volumes:
-#  dataset_volume — shared between backend containers for MRI images
-#  models_volume  — shared for trained EDN-SVM model artifacts
+# Services
+# ────────
+#   ai-service  — Python / FastAPI / TensorFlow (port 8000)
+#   backend     — Node.js / Express API          (port 5000)
+#   frontend    — React / Vite → nginx            (port 3000)
 #
-# Networks:
-#  app_network — internal bridge network between services
+# Named volumes
+# ─────────────
+#   dataset_volume      — raw + processed MRI images (shared with ai-service)
+#   models_volume       — trained Keras model weights  (shared with ai-service)
+#   gradcam_volume      — Grad-CAM PNG outputs         (shared with backend)
+#   uploads_volume      — Multer upload directory      (shared with backend)
+#   db_volume           — SQLite database file
+#   ai_logs_volume      — AI service rotating logs
+#   backend_logs_volume — Backend Winston logs
+#
+# Quick-start
+# ───────────
+#   # From the repo root:
+#   cp backend/.env.example   backend/.env
+#   cp frontend/.env.example  frontend/.env.local
+#   cp ai-service/.env.example ai-service/.env
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# To run only the backend + ai-service (no frontend build):
+#   docker compose -f docker/docker-compose.yml up backend ai-service
 
-# TODO: Implement in deployment phase
+version: "3.9"
+
+# ── Shared environment interpolation anchor ───────────────────────────────────
+x-common-env: &common-restart
+  restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  # ── AI Service — FastAPI / TensorFlow ──────────────────────────────────────
+  ai-service:
+    <<: *common-restart
+    build:
+      context: ..                  # repo root — needed for COPY app/ etc.
+      dockerfile: ai-service/Dockerfile
+    image: brain-tumor-ai-service:latest
+    container_name: bt_ai_service
+    env_file:
+      - ../ai-service/.env         # load all AI_SERVICE_* / MODEL_* vars
+    environment:
+      # Override path-sensitive vars to use container-internal mount points
+      SAVED_MODELS_DIR: /data/models
+      DATASET_RAW_DIR:  /data/dataset/raw
+      DATASET_PROCESSED_DIR: /data/dataset/processed
+      GRADCAM_OUTPUT_DIR: /data/gradcam
+      LOG_DIR: /data/logs/ai-service
+    volumes:
+      - models_volume:/data/models
+      - dataset_volume:/data/dataset
+      - gradcam_volume:/data/gradcam
+      - ai_logs_volume:/data/logs/ai-service
+    ports:
+      - "8000:8000"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s   # TF model loading can be slow
+      retries: 3
+
+  # ── Backend — Node.js / Express ────────────────────────────────────────────
+  backend:
+    <<: *common-restart
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    image: brain-tumor-backend:latest
+    container_name: bt_backend
+    env_file:
+      - ../backend/.env
+    environment:
+      NODE_ENV:       production
+      PORT:           "5000"
+      HOST:           "0.0.0.0"
+      FRONTEND_URL:   "http://localhost:3000"
+      AI_SERVICE_URL: "http://ai-service:8000"  # inter-service DNS
+      UPLOAD_DIR:     /data/uploads
+      DATASET_DIR:    /data/dataset
+      DB_PATH:        /data/db/brain_tumor.db
+      LOG_LEVEL:      info
+    volumes:
+      - uploads_volume:/data/uploads
+      - dataset_volume:/data/dataset
+      - db_volume:/data/db
+      - gradcam_volume:/data/gradcam:ro   # read-only — ai-service writes these
+      - backend_logs_volume:/data/logs/backend
+    ports:
+      - "5000:5000"
+    networks:
+      - app_network
+    depends_on:
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://localhost:5000/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # ── Frontend — React → nginx ────────────────────────────────────────────────
+  frontend:
+    <<: *common-restart
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        # Passed to Vite at build time — change for production deployments
+        VITE_API_BASE_URL:     "http://localhost:5000"
+        VITE_AI_SERVICE_URL:   "http://localhost:8000"
+        VITE_APP_NAME:         "Brain Tumour Detection"
+        VITE_ENABLE_GRADCAM:   "true"
+        VITE_ENABLE_COMPARISON: "true"
+    image: brain-tumor-frontend:latest
+    container_name: bt_frontend
+    ports:
+      - "3000:80"
+    networks:
+      - app_network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  app_network:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  dataset_volume:
+    driver: local
+  models_volume:
+    driver: local
+  gradcam_volume:
+    driver: local
+  uploads_volume:
+    driver: local
+  db_volume:
+    driver: local
+  ai_logs_volume:
+    driver: local
+  backend_logs_volume:
+    driver: local
