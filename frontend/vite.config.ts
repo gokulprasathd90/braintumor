@@ -12,8 +12,14 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': {
+      // AI service routes (FastAPI) — must be listed BEFORE the bare /api rule
+      '/api/v1': {
         target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      // Backend routes (Express)
+      '/api': {
+        target: 'http://localhost:5000',
         changeOrigin: true,
       },
     },

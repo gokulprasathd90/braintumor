@@ -1,0 +1,105 @@
+{
+  "project": "Brain Tumour Detection",
+  "version": "1.0.0",
+  "build_date": "2026-07-14",
+  "build_timestamp": "2026-07-14T17:32:05Z",
+  "git": {
+    "commit": "57c9a0c",
+    "branch": "main",
+    "tag": "v1.0.0"
+  },
+  "components": {
+    "ai_service": {
+      "language": "Python",
+      "runtime_version": "3.12",
+      "framework": "FastAPI",
+      "framework_version": "0.115.5",
+      "dl_framework": "TensorFlow",
+      "dl_framework_version": "2.20",
+      "entry_point": "app.main:app",
+      "port": 8000
+    },
+    "backend": {
+      "language": "JavaScript",
+      "runtime": "Node.js",
+      "runtime_version": "20 LTS",
+      "framework": "Express",
+      "framework_version": "4.21",
+      "entry_point": "server.js",
+      "port": 5000
+    },
+    "frontend": {
+      "language": "TypeScript",
+      "runtime": "Node.js",
+      "runtime_version": "20 LTS",
+      "framework": "React",
+      "framework_version": "18",
+      "bundler": "Vite",
+      "bundler_version": "5",
+      "port": 3000
+    }
+  },
+  "docker": {
+    "base_images": {
+      "ai_service": "python:3.12-slim",
+      "backend": "node:20-alpine",
+      "frontend": "node:20-alpine"
+    },
+    "registry": "ghcr.io/your-org/brain-tumor-detection",
+    "tags": {
+      "ai_service": [
+        "ghcr.io/your-org/brain-tumor-detection/ai-service:1.0.0",
+        "ghcr.io/your-org/brain-tumor-detection/ai-service:latest"
+      ],
+      "backend": [
+        "ghcr.io/your-org/brain-tumor-detection/backend:1.0.0",
+        "ghcr.io/your-org/brain-tumor-detection/backend:latest"
+      ],
+      "frontend": [
+        "ghcr.io/your-org/brain-tumor-detection/frontend:1.0.0",
+        "ghcr.io/your-org/brain-tumor-detection/frontend:latest"
+      ]
+    }
+  },
+  "ci": {
+    "platform": "GitHub Actions",
+    "workflow": "ci.yml",
+    "pipeline_stages": [
+      "lint",
+      "test",
+      "build",
+      "security-scan",
+      "docker-build"
+    ]
+  },
+  "cd": {
+    "platform": "GitHub Actions",
+    "workflow": "cd.yml",
+    "environments": ["staging", "production"]
+  },
+  "test_suites": {
+    "ai_service": {
+      "framework": "pytest",
+      "test_count": 1100,
+      "location": "ai-service/tests/"
+    },
+    "backend": {
+      "framework": "Jest",
+      "test_count": 112,
+      "location": "backend/tests/"
+    },
+    "frontend": {
+      "framework": "Vitest",
+      "test_count": 280,
+      "location": "frontend/src/"
+    },
+    "total": 1492
+  },
+  "environment_requirements": {
+    "python": ">=3.12",
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0",
+    "docker": ">=24.0.0",
+    "docker_compose": ">=2.20.0"
+  }
+}

@@ -8,6 +8,7 @@ import MockAdapter from 'axios-mock-adapter';
 import { apiClient } from '@/api/client';
 import { useDataset } from './useDataset';
 import { makeDatasetInfo, makeValidationReport } from '@/test/fixtures';
+import type { DatasetValidationReport } from '@/types';
 
 const mock = new MockAdapter(apiClient, { onNoMatch: 'throwException' });
 beforeEach(() => mock.reset());
@@ -36,9 +37,9 @@ describe('useDataset', () => {
     mock.onPost('/dataset/validate').reply(200, { success: true, data: report, message: '' });
     const { result } = renderHook(() => useDataset());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    let res: typeof result.current.validation;
+    let res: DatasetValidationReport | null = null;
     await act(async () => { res = await result.current.validate(); });
-    expect(res?.is_valid).toBe(true);
+    expect((res as DatasetValidationReport | null)?.is_valid).toBe(true);
     expect(result.current.validation?.classes_found).toHaveLength(4);
   });
 

@@ -343,3 +343,152 @@ dataset-info:  ## Print saved dataset_info.json for the processed directory
 	@cd $(AI) && source .venv/bin/activate \
 		&& python scripts/prepare_dataset.py info \
 		   --dir "$${INFO_DIR:-dataset/processed}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PERFORMANCE — profiling, benchmarking, stress testing, and reporting
+# ─────────────────────────────────────────────────────────────────────────────
+.PHONY: benchmark benchmark-all profile profile-api profile-training \
+        stress-test stress-api memory-report cache-report \
+        performance-report coverage
+
+benchmark:  ## Run the quick benchmark suite (preprocessing + cache + metrics)
+	@echo -e "$(CYAN)→ Running benchmark suite (quick)...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.benchmark import BenchmarkSuite; \
+import json; \
+suite = BenchmarkSuite(n_inference=5, n_preprocess=10, n_cache=20); \
+result = suite.run_all(batch_sizes=[4, 8]); \
+print(json.dumps(result.to_dict(), indent=2, default=str)); \
+"
+	@echo -e "$(GREEN)✓ Benchmark complete$(NC)"
+
+benchmark-all:  ## Run the full benchmark suite (all modules, more iterations)
+	@echo -e "$(CYAN)→ Running full benchmark suite...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.benchmark import BenchmarkSuite; \
+import json; \
+suite = BenchmarkSuite(n_inference=20, n_preprocess=50, n_cache=100); \
+result = suite.run_all(batch_sizes=[4, 8, 16]); \
+print(json.dumps(result.to_dict(), indent=2, default=str)); \
+print('Summary:', json.dumps(result.summary(), indent=2)); \
+"
+	@echo -e "$(GREEN)✓ Full benchmark complete$(NC)"
+
+profile:  ## Profile all major modules (CPU + memory)
+	@echo -e "$(CYAN)→ Profiling major modules...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.profiler import profile_function; \
+from app.performance.benchmark import _make_test_image; \
+from app.preprocessing.preprocess import preprocess_for_inference; \
+import json; \
+img = _make_test_image(); \
+r = profile_function(lambda: preprocess_for_inference(img), n=20, label='preprocess', \
+    cpu_profile=True, memory_profile=True); \
+print(json.dumps(r.to_dict(), indent=2)); \
+"
+	@echo -e "$(GREEN)✓ Profile complete$(NC)"
+
+profile-api:  ## Show live API latency stats (reads from optimizer singleton)
+	@echo -e "$(CYAN)→ API performance stats...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.optimizer import get_api_stats; \
+import json; \
+print(json.dumps(get_api_stats(), indent=2, default=str)); \
+"
+
+profile-training:  ## Profile training startup overhead
+	@echo -e "$(CYAN)→ Profiling training components...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.profiler import profile_function; \
+import json; \
+def load_arch(): \
+    from app.models.architectures import build_model; \
+    build_model('cnn', num_classes=4, image_size=224); \
+r = profile_function(load_arch, n=3, label='build_cnn', cpu_profile=True); \
+print(json.dumps(r.to_dict(), indent=2)); \
+"
+
+stress-test:  ## Run callable-based stress test (10/50/100 concurrent workers)
+	@echo -e "$(CYAN)→ Running stress tests...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.concurrency import run_concurrent; \
+from app.performance.benchmark import _make_test_image; \
+from app.preprocessing.preprocess import preprocess_for_inference; \
+import json; \
+img = _make_test_image(); \
+for w in [10, 50, 100]: \
+    r = run_concurrent(lambda: preprocess_for_inference(img), workers=w, \
+        requests=w*5, label=f'stress_w{w}'); \
+    print(json.dumps(r.to_dict(), indent=2)); \
+"
+	@echo -e "$(GREEN)✓ Stress tests complete$(NC)"
+
+stress-api:  ## Run HTTP stress test against the running AI service (requires dev server)
+	@echo -e "$(CYAN)→ Running HTTP stress tests (requires server on :8000)...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.concurrency import StressTestRunner; \
+import json; \
+runner = StressTestRunner(base_url='http://localhost:8000'); \
+results = runner.run_full_stress_suite(worker_levels=[10, 50, 100]); \
+for r in results: print(json.dumps(r.to_dict(), indent=2)); \
+" || echo -e "$(YELLOW)⚠ Server not running — start with 'make dev-ai' first$(NC)"
+
+memory-report:  ## Generate a memory usage and leak-detection report
+	@echo -e "$(CYAN)→ Generating memory report...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.memory import get_memory_profiler; \
+from app.performance.benchmark import _make_test_image; \
+from app.preprocessing.preprocess import preprocess_for_inference; \
+import json; \
+profiler = get_memory_profiler(); \
+img = _make_test_image(); \
+profiler.profile(lambda: preprocess_for_inference(img), label='preprocess'); \
+result = profiler.detect_leaks(lambda: preprocess_for_inference(img), \
+    label='leak_check', iterations=5); \
+report = profiler.get_report(); \
+print(json.dumps({'report': report, 'leak_check': result}, indent=2, default=str)); \
+"
+	@echo -e "$(GREEN)✓ Memory report complete$(NC)"
+
+cache-report:  ## Print cache hit/miss/eviction statistics for all caches
+	@echo -e "$(CYAN)→ Generating cache report...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.cache import get_cache_report; \
+import json; \
+print(json.dumps(get_cache_report(), indent=2, default=str)); \
+"
+
+performance-report:  ## Generate and save a full JSON + HTML performance report
+	@echo -e "$(CYAN)→ Generating performance report...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& python -c "\
+from app.performance.reports import generate_performance_report, get_report_generator; \
+import json; \
+rg = get_report_generator(); \
+report = generate_performance_report(); \
+json_path = rg.save_report(report); \
+html_path = rg.save_html_report(report); \
+print(f'JSON report → {json_path}'); \
+print(f'HTML report → {html_path}'); \
+print(json.dumps({k: v for k, v in report.items() if k != 'profiler'}, indent=2, default=str)); \
+"
+	@echo -e "$(GREEN)✓ Performance report saved to ai-service/logs/performance/$(NC)"
+
+coverage:  ## Run AI service tests with full coverage report (HTML + terminal)
+	@echo -e "$(CYAN)→ Running tests with coverage...$(NC)"
+	@cd $(AI) && source .venv/bin/activate \
+		&& pytest --cov=app --cov-report=term-missing \
+		          --cov-report=html:htmlcov \
+		          --cov-report=json:coverage.json \
+		          -v --tb=short tests/
+	@echo -e "$(GREEN)✓ Coverage report → $(AI)/htmlcov/index.html$(NC)"
+

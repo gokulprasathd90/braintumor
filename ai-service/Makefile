@@ -89,6 +89,15 @@ help:
 	@echo "  make models                        List all models + cache status"
 	@echo "  make reload-model                  Hot-reload the active model"
 	@echo "  make reload-model ARCH=resnet50    Hot-reload a specific model"
+	@echo "  ── Performance ────────────────────────────────────────────────────"
+	@echo "  make benchmark                     Quick benchmark (low iterations)"
+	@echo "  make benchmark-all                 Full benchmark (all modules)"
+	@echo "  make profile                       CPU+memory profile of hot paths"
+	@echo "  make stress-test                   Concurrent stress at 10/50/100 workers"
+	@echo "  make memory-report                 Memory usage + leak detection"
+	@echo "  make cache-report                  Cache hit/miss/eviction stats"
+	@echo "  make performance-report            Save full JSON+HTML perf report"
+	@echo "  make coverage                      Tests with HTML+JSON coverage"
 	@echo "─────────────────────────────────────────────────────────────────────"
 	@echo ""
 
@@ -231,3 +240,112 @@ import json; \
 m = reload_model('$(ARCH)'); \
 print(json.dumps({'status': 'reloaded', 'model': '$(ARCH)', 'params': m.count_params()}, indent=2)); \
 "
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Performance targets (Module 11)
+# ─────────────────────────────────────────────────────────────────────────────
+
+.PHONY: benchmark benchmark-all profile stress-test \
+        memory-report cache-report performance-report coverage
+
+benchmark:  ## Run quick benchmark suite (low iteration counts)
+	$(PYTHON) -c "\
+from app.performance.benchmark import BenchmarkSuite; \
+import json; \
+suite = BenchmarkSuite(n_inference=5, n_preprocess=10, n_cache=20); \
+result = suite.run_all(batch_sizes=[4, 8]); \
+print(json.dumps(result.to_dict(), indent=2, default=str)); \
+"
+
+benchmark-all:  ## Run full benchmark suite (high iteration counts, all batch sizes)
+	$(PYTHON) -c "\
+from app.performance.benchmark import BenchmarkSuite; \
+import json; \
+suite = BenchmarkSuite(n_inference=20, n_preprocess=50, n_cache=100); \
+result = suite.run_all(batch_sizes=[4, 8, 16]); \
+print('=== Full Benchmark Suite ==='); \
+print(json.dumps(result.to_dict(), indent=2, default=str)); \
+print('=== Summary ==='); \
+print(json.dumps(result.summary(), indent=2)); \
+"
+
+profile:  ## Profile preprocessing, cache, and metrics (CPU + memory)
+	$(PYTHON) -c "\
+from app.performance.profiler import profile_function; \
+from app.performance.benchmark import _make_test_image; \
+from app.preprocessing.preprocess import preprocess_for_inference; \
+from app.metrics.system import get_system_metrics; \
+from app.inference.cache import cache_stats; \
+import json; \
+img = _make_test_image(); \
+profiles = []; \
+for label, fn in [('preprocess', lambda: preprocess_for_inference(img)), \
+                   ('system_metrics', get_system_metrics), \
+                   ('cache_stats', cache_stats)]: \
+    r = profile_function(fn, n=20, label=label, cpu_profile=False, memory_profile=True); \
+    profiles.append(r.to_dict()); \
+print(json.dumps(profiles, indent=2)); \
+"
+
+stress-test:  ## Callable stress test at 10, 50, 100 concurrent workers
+	$(PYTHON) -c "\
+from app.performance.concurrency import run_concurrent; \
+from app.performance.benchmark import _make_test_image; \
+from app.preprocessing.preprocess import preprocess_for_inference; \
+import json; \
+img = _make_test_image(); \
+results = []; \
+for w in [10, 50, 100]: \
+    r = run_concurrent(lambda: preprocess_for_inference(img), workers=w, \
+        requests=w*5, label=f'stress_w{w}'); \
+    results.append(r.to_dict()); \
+    print(f'workers={w}: avg={r.avg_ms:.1f}ms throughput={r.throughput:.1f}rps errors={r.failed}'); \
+print(json.dumps(results, indent=2)); \
+"
+
+memory-report:  ## Profile memory usage and run leak detection
+	$(PYTHON) -c "\
+from app.performance.memory import get_memory_profiler; \
+from app.performance.benchmark import _make_test_image; \
+from app.preprocessing.preprocess import preprocess_for_inference; \
+import json; \
+p = get_memory_profiler(); \
+img = _make_test_image(); \
+p.profile(lambda: preprocess_for_inference(img), label='preprocess'); \
+leak = p.detect_leaks(lambda: preprocess_for_inference(img), label='leak_check', iterations=5); \
+tm = p.profile_tracemalloc(lambda: preprocess_for_inference(img), label='tracemalloc'); \
+cleanup = p.force_cleanup(); \
+report = p.get_report(); \
+print(json.dumps({'report': report, 'leak_check': leak, \
+                   'tracemalloc': tm, 'cleanup': cleanup}, indent=2, default=str)); \
+"
+
+cache-report:  ## Show cache hit rates, evictions, and tuning recommendations
+	$(PYTHON) -c "\
+from app.performance.cache import get_cache_report; \
+import json; \
+print(json.dumps(get_cache_report(), indent=2, default=str)); \
+"
+
+performance-report:  ## Generate full JSON + HTML performance report and save to logs/
+	$(PYTHON) -c "\
+from app.performance.reports import generate_performance_report, get_report_generator; \
+import json; \
+rg = get_report_generator(); \
+report = generate_performance_report(); \
+jp = rg.save_report(report); \
+hp = rg.save_html_report(report); \
+print(f'Saved JSON → {jp}'); \
+print(f'Saved HTML → {hp}'); \
+"
+
+coverage:  ## Run full test suite with HTML + JSON coverage reports
+	$(PYTHON) -m pytest \
+		--cov=app \
+		--cov-report=term-missing \
+		--cov-report=html:htmlcov \
+		--cov-report=json:coverage.json \
+		-v --tb=short \
+		tests/
+	@echo "Coverage report → htmlcov/index.html"
+

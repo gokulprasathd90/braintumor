@@ -53,13 +53,13 @@ describe('apiClient — error handling', () => {
 
   it('exposes status 0 on network error', async () => {
     mock.onGet('/net-error').networkError();
-    const err = await get('/net-error').catch((e) => e);
+    const err = await get('/net-error').catch((e: unknown) => e) as { status: number };
     expect(err.status).toBe(0);
   });
 
   it('falls back to err.message when no response body', async () => {
     mock.onGet('/timeout').timeout();
-    const err = await get('/timeout').catch((e) => e);
+    const err = await get('/timeout').catch((e: unknown) => e) as { detail: string };
     expect(typeof err.detail).toBe('string');
     expect(err.detail.length).toBeGreaterThan(0);
   });

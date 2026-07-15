@@ -30,6 +30,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routes import router
 from app.api.auth_routes import auth_router
+from app.api.performance_routes import performance_router
 from app.core.config import settings
 from app.core.logging import logger
 from app.security.rate_limit import limiter
@@ -119,6 +120,17 @@ def create_app() -> FastAPI:
             f"{request.method} {request.url.path} "
             f"→ {response.status_code} ({elapsed_ms:.1f}ms)"
         )
+        # Feed the API optimizer so /performance/api-stats has live data.
+        try:
+            from app.performance.optimizer import record_request
+            record_request(
+                path=request.url.path,
+                method=request.method,
+                elapsed_ms=elapsed_ms,
+                status_code=response.status_code,
+            )
+        except Exception:
+            pass  # never let metrics collection crash a real request
         return response
 
     # ── Global exception handler ──────────────────────────────────────────────
@@ -141,6 +153,7 @@ def create_app() -> FastAPI:
     # All AI endpoints are prefixed with /api/v1
     app.include_router(router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(performance_router, prefix="/api/v1")
 
     return app
 

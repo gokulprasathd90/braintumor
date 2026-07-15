@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import Button from './Button';
 
 export type BatchMode = 'files' | 'zip';
@@ -27,7 +27,7 @@ export default function BatchUpload({ mode, onSubmit, loading = false }: Props) 
   const [files, setFiles] = useState<File[]>([]);
   const [dropError, setDropError] = useState('');
 
-  const onDrop = useCallback((accepted: File[], rejected: { errors: { code: string; message: string }[] }[]) => {
+  const onDrop = useCallback((accepted: File[], rejected: FileRejection[]) => {
     setDropError('');
     if (rejected.length > 0) {
       setDropError(rejected[0].errors[0]?.message ?? 'Invalid file');

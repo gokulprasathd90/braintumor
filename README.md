@@ -1,38 +1,137 @@
 # Brain Tumour Detection
 
-A full-stack application for MRI brain tumour classification using deep learning.
+> Deep-learning MRI classification with explainable AI, production inference pipeline, and full-stack web interface.
 
-| Service | Technology | Port |
+[![CI](https://github.com/your-org/brain-tumor-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/brain-tumor-detection/actions/workflows/ci.yml)
+[![CD](https://github.com/your-org/brain-tumor-detection/actions/workflows/cd.yml/badge.svg)](https://github.com/your-org/brain-tumor-detection/actions/workflows/cd.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.20-orange)](https://www.tensorflow.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20_LTS-green)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18-61DAFB)](https://reactjs.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-1492%2B_passing-brightgreen)](#testing)
+
+---
+
+## Overview
+
+Brain Tumour Detection is a production-ready, full-stack application that classifies MRI brain scans into four categories using deep learning:
+
+| Class | Description |
+|---|---|
+| **Glioma** | Tumour originating from glial cells |
+| **Meningioma** | Tumour arising from the meninges |
+| **Pituitary** | Tumour of the pituitary gland |
+| **No Tumour** | Healthy scan — no detectable mass |
+
+The system supports four model architectures, provides Grad-CAM visual explanations, offers async training with experiment tracking, and ships with a React dashboard for real-time monitoring.
+
+---
+
+## Architecture
+
+```
+Browser (React 18 + Vite + Tailwind CSS)
+         │  port 3000
+         ▼
+  Node.js / Express API          ← port 5000
+  ├── /api/upload                 Multer file upload + SQLite storage
+  ├── /api/preprocess             OpenCV preprocessing pipeline
+  ├── /api/segment                Image segmentation
+  ├── /api/features               Feature extraction
+  ├── /api/classify               EDN-SVM classifier
+  ├── /api/batch                  Batch processing
+  ├── /api/results                Result retrieval
+  ├── /api/metrics                Aggregated metrics
+  └── /api/compare                Model comparison
+         │  proxies AI requests
+         ▼
+  Python / FastAPI / TensorFlow  ← port 8000
+  ├── /api/v1/health              Liveness probe
+  ├── /api/v1/predict             Single-image inference + Grad-CAM
+  ├── /api/v1/train               Model training (sync + async)
+  ├── /api/v1/evaluate            Model evaluation on test set
+  ├── /api/v1/dataset/*           Dataset management
+  ├── /api/v1/preprocess/*        Image preprocessing & quality check
+  ├── /api/v1/auth/*              JWT authentication + RBAC
+  ├── /api/v1/performance/*       Performance monitoring + benchmarking
+  └── /api/v1/dashboard/*         Metrics & monitoring dashboard
+```
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Version |
 |---|---|---|
-| **Frontend** | React 18 + Vite + Tailwind CSS | 3000 |
-| **Backend** | Node.js 20 + Express + SQLite | 5000 |
-| **AI Service** | Python 3.12 + FastAPI + TensorFlow | 8000 |
-
-The AI service classifies MRI scans into four categories: **glioma**, **meningioma**, **no tumour**, and **pituitary** tumour, using EfficientNetB3 (default), VGG-16, ResNet-50, or a custom CNN. Grad-CAM heatmaps provide visual explainability.
+| **Frontend** | React + Vite + TypeScript | 18 / 5 / 5.3 |
+| **Frontend UI** | Tailwind CSS + Recharts | 3.4 / 2.12 |
+| **Backend** | Node.js + Express | 20 LTS / 4.21 |
+| **Database** | SQLite via better-sqlite3 | — |
+| **AI Service** | Python + FastAPI | 3.12 / 0.115.5 |
+| **Deep Learning** | TensorFlow / Keras | 2.20 |
+| **Computer Vision** | OpenCV + Pillow | 4.10 / 11.0 |
+| **Explainability** | Grad-CAM (tf-explain) | 0.3.1 |
+| **Auth** | JWT (python-jose) + bcrypt | HS256 / 4.0 |
+| **Rate Limiting** | SlowAPI | 0.1.9 |
+| **Container** | Docker + Docker Compose | 24+ / v2 |
+| **CI/CD** | GitHub Actions | — |
+| **Testing (Python)** | pytest + pytest-asyncio | 8.3 / 0.24 |
+| **Testing (Frontend)** | Vitest + Testing Library | 1.3 / 14 |
+| **Testing (Backend)** | Jest + Supertest | 30 / 7.1 |
 
 ---
 
 ## Prerequisites
 
-| Tool | Minimum version | Install |
+| Tool | Minimum | Install |
 |---|---|---|
 | Python | 3.12 | [python.org](https://www.python.org/downloads/) |
 | Node.js | 20 LTS | [nodejs.org](https://nodejs.org/) |
 | npm | 10 | bundled with Node |
-| Docker | 24 | [docs.docker.com/get-docker](https://docs.docker.com/get-docker/) |
-| Docker Compose | v2 (plugin) | bundled with Docker Desktop |
+| Docker | 24 | [docs.docker.com](https://docs.docker.com/get-docker/) |
+| Docker Compose | v2.20 | bundled with Docker Desktop |
 | GNU Make | any | Windows: [gnuwin32](https://gnuwin32.sourceforge.net/packages/make.htm) or WSL |
 
 ---
 
-## Quick-start (local, no Docker)
+## Quick Start — Docker (Recommended)
 
-### 1. Clone and bootstrap
+The fastest way to run everything:
 
 ```bash
-git clone <repo-url>
-cd BRAINTUMOR
-make setup          # creates .venv, npm ci for backend + frontend, copies .env files
+# 1. Clone the repository
+git clone https://github.com/your-org/brain-tumor-detection.git
+cd brain-tumor-detection
+
+# 2. Copy environment templates
+cp ai-service/.env.example  ai-service/.env
+cp backend/.env.example     backend/.env
+cp frontend/.env.example    frontend/.env.local
+
+# 3. Set a strong JWT secret
+echo "JWT_SECRET_KEY=$(openssl rand -hex 32)" >> ai-service/.env
+
+# 4. Build and start all services
+docker compose -f docker/docker-compose.yml up --build -d
+
+# 5. Follow startup logs
+docker compose -f docker/docker-compose.yml logs -f
+```
+
+Once healthy:
+- **Frontend** → http://localhost:3000
+- **Backend API** → http://localhost:5000
+- **AI Service + Swagger** → http://localhost:8000/docs
+
+---
+
+## Quick Start — Local Development
+
+### 1. Bootstrap all environments
+
+```bash
+make setup
 ```
 
 On Windows without Make:
@@ -53,90 +152,154 @@ npm ci
 copy .env.example .env.local
 ```
 
-### 2. Edit environment files
-
-Review and adjust the copied `.env` files before starting:
+### 2. Configure environment files
 
 ```
-ai-service/.env        ← AI service config (model paths, ports, classes)
-backend/.env           ← Backend config (port, DB path, upload dir)
-frontend/.env.local    ← Frontend config (API URLs, feature flags)
+ai-service/.env    ← AI service config
+backend/.env       ← Backend config
+frontend/.env.local ← Frontend config
 ```
+
+See the [Environment Variables Reference](#environment-variables) below for all options.
 
 ### 3. Run database migrations
 
 ```bash
 make migrate
-# or: cd backend && node database/migrate.js
+# or
+cd backend && node database/migrate.js
 ```
 
-### 4. Start all services
-
-Each service must run in its own terminal (or use `make dev` with tmux):
+### 4. Start all three services
 
 ```bash
-# Terminal 1 — AI Service
+# Terminal 1 — AI Service (port 8000)
 cd ai-service
-source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 2 — Backend
+# Terminal 2 — Backend (port 5000)
 cd backend
 npm run dev
 
-# Terminal 3 — Frontend
+# Terminal 3 — Frontend (port 3000)
 cd frontend
 npm run dev
 ```
 
-**Or with tmux (Linux/macOS):**
-
-```bash
-make dev
-```
-
-### 5. Open the app
-
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
-- AI Service API docs: http://localhost:8000/docs
-
 ---
 
-## Quick-start (Docker)
+## Usage
+
+### Train a model
 
 ```bash
-# 1. Copy env files
-cp backend/.env.example   backend/.env
-cp frontend/.env.example  frontend/.env.local
-cp ai-service/.env.example ai-service/.env
-
-# 2. Build and start
-make docker-up
-
-# Equivalent without Make:
-docker compose -f docker/docker-compose.yml up --build -d
+curl -X POST http://localhost:8000/api/v1/train \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "efficientnet",
+    "epochs": 30,
+    "batch_size": 32,
+    "learning_rate": 0.0001,
+    "fine_tune": true
+  }'
 ```
 
-Services will be available at the same ports (3000 / 5000 / 8000) once all health checks pass.
-
-To follow logs:
+### Run inference
 
 ```bash
-make docker-logs            # all services
-make docker-logs-ai         # AI service only
-make docker-logs-backend    # backend only
+curl -X POST http://localhost:8000/api/v1/predict \
+  -F "file=@mri_scan.jpg"
 ```
 
-To stop:
+### Async training (experiment-tracked)
 
 ```bash
-make docker-down
+# Start async job
+curl -X POST http://localhost:8000/api/v1/train/start \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "resnet50", "epochs": 50}'
+
+# Poll status
+curl http://localhost:8000/api/v1/train/status/{job_id}
+
+# List all experiments
+curl http://localhost:8000/api/v1/train/experiments
 ```
 
 ---
 
-## Environment variables reference
+## Model Architectures
+
+| Architecture | Params (approx.) | Notes |
+|---|---|---|
+| **EfficientNetB0** (default) | 5.3M | Best accuracy / speed tradeoff |
+| **ResNet50** | 25.6M | Solid baseline, good generalisation |
+| **VGG16** | 138M | Classic, high memory usage |
+| **Custom CNN** | ~500K | Lightweight, fast training |
+
+All architectures support two-phase fine-tuning: head training first, then selective backbone unfreezing.
+
+---
+
+## Dataset
+
+The model expects MRI images organised in class subdirectories:
+
+```
+dataset/raw/
+├── Training/
+│   ├── glioma/
+│   ├── meningioma/
+│   ├── notumor/
+│   └── pituitary/
+└── Testing/
+    ├── glioma/
+    ├── meningioma/
+    ├── notumor/
+    └── pituitary/
+```
+
+Prepare the dataset via the API:
+
+```bash
+# Validate structure
+curl -X POST http://localhost:8000/api/v1/dataset/validate
+
+# Split into train/val/test
+curl -X POST http://localhost:8000/api/v1/dataset/prepare \
+  -H "Content-Type: application/json" \
+  -d '{"train_ratio": 0.7, "val_ratio": 0.15, "test_ratio": 0.15}'
+```
+
+---
+
+## Testing
+
+```bash
+# Run all test suites
+make test
+
+# Python tests only (with coverage)
+make test-ai-coverage
+
+# Frontend tests
+cd frontend && npm test
+
+# Backend tests
+cd backend && npm test
+```
+
+| Suite | Framework | Tests |
+|---|---|---|
+| AI Service | pytest | 1,100+ |
+| Frontend | Vitest | 280+ |
+| Backend | Jest | 112+ |
+| **Total** | | **1,492+** |
+
+---
+
+## Environment Variables
 
 ### AI Service (`ai-service/.env`)
 
@@ -150,12 +313,16 @@ make docker-down
 | `ACTIVE_MODEL` | `efficientnet` | `cnn` \| `vgg16` \| `resnet50` \| `efficientnet` |
 | `IMAGE_SIZE` | `224` | Input image dimension (pixels) |
 | `CLASS_NAMES` | `glioma,meningioma,notumor,pituitary` | Comma-separated class labels |
-| `SAVED_MODELS_DIR` | `./saved_models` | Where trained weights are stored |
+| `SAVED_MODELS_DIR` | `./saved_models` | Trained Keras weights directory |
 | `DATASET_RAW_DIR` | `./dataset/raw` | Raw MRI image dataset |
 | `DATASET_PROCESSED_DIR` | `./dataset/processed` | Preprocessed images |
-| `GRADCAM_OUTPUT_DIR` | `./gradcam_output` | Grad-CAM PNG output directory |
+| `GRADCAM_OUTPUT_DIR` | `./gradcam_output` | Grad-CAM PNG output |
+| `JWT_SECRET_KEY` | *(change me!)* | HS256 signing secret |
+| `JWT_ALGORITHM` | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token lifetime |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime |
+| `BCRYPT_ROUNDS` | `12` | bcrypt cost factor |
 | `LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
-| `LOG_DIR` | `./logs` | Log file directory |
 
 ### Backend (`backend/.env`)
 
@@ -165,11 +332,8 @@ make docker-down
 | `NODE_ENV` | `development` | `development` \| `production` \| `test` |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
 | `UPLOAD_DIR` | `../uploads` | Multer upload directory |
-| `DATASET_DIR` | `../dataset` | Shared dataset root |
-| `MODEL_PATH` | `./models/edn_svm.json` | EDN-SVM model JSON path |
 | `DB_PATH` | `./database/brain_tumor.db` | SQLite database file |
 | `AI_SERVICE_URL` | `http://localhost:8000` | AI service base URL |
-| `LOG_LEVEL` | `info` | Winston log level |
 
 ### Frontend (`frontend/.env.local`)
 
@@ -178,138 +342,133 @@ make docker-down
 | `VITE_API_BASE_URL` | `http://localhost:5000` | Backend API base URL |
 | `VITE_AI_SERVICE_URL` | `http://localhost:8000` | AI service base URL |
 | `VITE_APP_NAME` | `Brain Tumour Detection` | App display name |
-| `VITE_ENABLE_GRADCAM` | `true` | Show Grad-CAM heatmap panel |
-| `VITE_ENABLE_COMPARISON` | `true` | Show model comparison tab |
+| `VITE_ENABLE_GRADCAM` | `true` | Show Grad-CAM overlay |
 
 ---
 
-## Makefile targets
+## Makefile Targets
 
 ```
-make setup              Bootstrap all three environments (first-time only)
-make setup-ai           Create Python venv and install AI service deps
-make setup-backend      npm ci for backend, copy .env
-make setup-frontend     npm ci for frontend, copy .env.local
-
-make dev                Start all services in a tmux session
-make dev-ai             AI service only  (port 8000, --reload)
-make dev-backend        Backend only     (port 5000, nodemon)
-make dev-frontend       Frontend only    (port 3000, Vite HMR)
-
-make test               Run all test suites
-make test-ai            pytest (ai-service/tests/)
-make test-backend       Jest  (backend/tests/)
-make test-ai-coverage   pytest with HTML coverage report
-
-make build              Build all production artefacts
-make build-frontend     Vite build → frontend/dist/
-
-make docker-build       docker compose build --no-cache
-make docker-up          Build and start all containers (detached)
-make docker-down        Stop and remove containers
-make docker-restart     Restart all containers
-make docker-logs        Tail logs from all containers
-make docker-logs-ai     Tail AI service logs
-make docker-logs-backend Tail backend logs
-make docker-ps          Show container status
-make docker-prune       Remove stopped containers and dangling images
-
-make env-check          Verify all .env files exist
-make migrate            Run SQLite database migrations
-make clean              Remove build artefacts and logs
-make clean-all          Deep clean (removes .venv and node_modules)
+make setup               Bootstrap all three environments
+make dev                 Start all services (tmux session)
+make test                Run all test suites
+make build               Build all production artefacts
+make docker-up           Build and start all containers (detached)
+make docker-down         Stop and remove containers
+make docker-logs         Tail logs from all containers
+make migrate             Run SQLite database migrations
+make clean               Remove build artefacts and logs
 ```
+
+Run `make help` for the full list.
 
 ---
 
-## Project structure
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Installation Guide](docs/installation.md) | Step-by-step setup for all platforms |
+| [User Guide](docs/user_guide.md) | Dataset prep, training, inference, dashboard |
+| [Developer Guide](docs/developer_guide.md) | Project structure, standards, extending |
+| [API Reference](docs/api_reference.md) | All REST endpoints with examples |
+| [Architecture](docs/project_architecture.md) | System design and data flows |
+| [Deployment Guide](docs/deployment.md) | Docker, CI/CD, production |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+| [FAQ](docs/faq.md) | Frequently asked questions |
+| [Release Notes](docs/release_notes.md) | Version history |
+| [Final Report](docs/final_report.md) | Project statistics and summary |
+| [Performance Guide](docs/performance.md) | Profiling, benchmarking, optimisation |
+| [Security Architecture](docs/authentication_architecture.md) | Auth, JWT, RBAC details |
+| [CI/CD Guide](docs/cicd-guide.md) | GitHub Actions pipeline reference |
+| [Docker Guide](docs/docker-guide.md) | Container configuration reference |
+| [Production Checklist](docs/production-checklist.md) | Pre-launch checklist |
+| [Changelog](CHANGELOG.md) | Module-by-module feature changelog |
+
+---
+
+## Project Structure
 
 ```
-BRAINTUMOR/
-├── ai-service/               # Python / FastAPI / TensorFlow
+brain-tumor-detection/
+├── ai-service/                  Python / FastAPI / TensorFlow
 │   ├── app/
-│   │   ├── api/routes.py     # REST endpoints
-│   │   ├── core/             # config, logging
-│   │   ├── models/           # architectures, train, predict, evaluate
-│   │   ├── preprocessing/    # image pipeline
-│   │   └── utils/gradcam.py  # Grad-CAM explainability
-│   ├── dataset/              # raw/ and processed/ MRI images
-│   ├── saved_models/         # trained Keras weights
-│   ├── tests/                # pytest suite
+│   │   ├── api/                 REST route handlers
+│   │   ├── core/                Config, logging
+│   │   ├── dataset/             Validation, splitting, stats
+│   │   ├── inference/           Pipeline, batch, cache, results
+│   │   ├── metrics/             System, inference, training, dashboard
+│   │   ├── models/              Architectures, train, predict, evaluate
+│   │   ├── performance/         Profiler, benchmark, cache, memory
+│   │   ├── preprocessing/       Image pipeline, augmentation, quality
+│   │   ├── security/            JWT, auth, roles, rate limiting, audit
+│   │   ├── training/            Job store, experiment registry
+│   │   └── utils/               Grad-CAM
+│   ├── dataset/                 raw/ and processed/ MRI images
+│   ├── saved_models/            Trained Keras weights
+│   ├── tests/                   pytest suite (1,100+ tests)
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── setup_env.ps1         # Windows bootstrap
-│   └── setup_env.sh          # Linux/macOS bootstrap
+│   └── requirements.txt
 │
-├── backend/                  # Node.js / Express / SQLite
-│   ├── api/                  # route handlers
-│   ├── database/             # schema SQL, migrations, db.js
-│   ├── middleware/           # upload, error handler, validate
-│   ├── pipeline/             # preprocessing, segmentation, features, classifier
+├── backend/                     Node.js / Express / SQLite
+│   ├── api/                     Route handlers (9 modules)
+│   ├── database/                Schema SQL, migrations, db.js
+│   ├── middleware/              Upload, error handling, validation
+│   ├── pipeline/                Preprocessing, segmentation, classifier
 │   ├── server.js
-│   ├── config.js
-│   └── .env.example
+│   └── package.json
 │
-├── frontend/                 # React 18 / Vite / Tailwind
+├── frontend/                    React 18 / Vite / TypeScript
 │   ├── src/
-│   ├── vite.config.js
-│   └── .env.example
+│   │   ├── components/          Reusable UI components
+│   │   ├── pages/               Route-level page components
+│   │   ├── hooks/               Custom React hooks
+│   │   ├── api/                 Axios API clients
+│   │   ├── context/             React context providers
+│   │   └── types/               TypeScript type definitions
+│   ├── package.json
+│   └── vite.config.ts
 │
-├── docker/
-│   ├── docker-compose.yml
+├── docker/                      Docker Compose configurations
+│   ├── docker-compose.yml       Base configuration
+│   ├── docker-compose.dev.yml   Development overrides
+│   ├── docker-compose.prod.yml  Production overrides
 │   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend
-│   └── nginx.conf
+│   └── Dockerfile.frontend
 │
-├── Makefile
+├── docs/                        Project documentation
+├── scripts/                     Deployment and maintenance scripts
+├── .github/workflows/           CI/CD pipeline definitions
+├── Makefile                     Developer task automation
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
 └── README.md
 ```
 
 ---
 
-## Training a model
+## Contributing
 
-With the AI service running locally:
-
-```bash
-# Train EfficientNetB3 (default — recommended)
-curl -X POST http://localhost:8000/api/v1/train \
-  -H "Content-Type: application/json" \
-  -d '{"model_name": "efficientnet", "epochs": 30, "batch_size": 32}'
-
-# Train the lightweight custom CNN
-curl -X POST http://localhost:8000/api/v1/train \
-  -d '{"model_name": "cnn", "epochs": 50, "fine_tune": false}'
-```
-
-Dataset must be placed in `ai-service/dataset/raw/` following Keras directory layout:
-
-```
-dataset/raw/
-    glioma/       ← MRI images for class "glioma"
-    meningioma/
-    notumor/
-    pituitary/
-```
-
-## Running inference
-
-```bash
-curl -X POST http://localhost:8000/api/v1/predict \
-  -F "image=@path/to/mri_scan.jpg" \
-  -F "model_name=efficientnet" \
-  -F "generate_gradcam=true"
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on reporting issues, submitting pull requests, and the development workflow.
 
 ---
 
-## Running tests
+## Security
 
-```bash
-make test               # all suites
+To report a security vulnerability, please follow the process described in [SECURITY.md](SECURITY.md). Do not open a public GitHub issue for security concerns.
 
-# Individual suites
-make test-ai            # 81 Python tests
-make test-backend       # Jest tests
-make test-ai-coverage   # with HTML coverage report → ai-service/htmlcov/
-```
+---
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## Acknowledgements
+
+- [Brain Tumor MRI Dataset](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset) (Kaggle) for training data
+- [TensorFlow](https://www.tensorflow.org/) team for the deep learning framework
+- [FastAPI](https://fastapi.tiangolo.com/) for the elegant Python web framework
+- [tf-explain](https://tf-explain.readthedocs.io/) for Grad-CAM explainability
