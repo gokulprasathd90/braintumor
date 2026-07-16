@@ -193,7 +193,6 @@ def _build_efficientnet(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape,
-        include_preprocessing=False,  # normalisation done in preprocessing module
     )
     base.trainable = False  # Phase 1: freeze backbone
 

@@ -1,64 +1,114 @@
 'use strict';
 
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const router  = express.Router();
-
-const db      = require('../database/db');
-const { validateImageId } = require('../middleware/validateRequest');
-const { startTimer }      = require('../utils/timer');
-const logger  = require('../utils/logger');
-
 /**
  * POST /api/classify/:imageId
  *
- * Classifies the MRI image as "normal" or "abnormal" using the EDN-SVM model.
- * Input: GLCM feature vector stored in `features` table.
- * Output: prediction + confidence score.
+ * Forwards the raw MRI image to the FastAPI AI service (POST /api/v1/predict),
+ * stores the real prediction in the `results` table, and returns the full
+ * AI response including class, confidence, per-class probabilities, and the
+ * Grad-CAM heatmap path.
  *
- * Paper target: 97.93% accuracy, 92% sensitivity, 98% specificity.
- *
- * Currently returns a placeholder prediction — EDN-SVM wired in pipeline phase.
+ * Request: no body — imageId from URL identifies which image to classify.
  *
  * Success response 200:
  *  {
  *    success: true,
  *    data: {
- *      image_id, prediction, confidence,
- *      computational_time_ms, next_step
+ *      image_id, predicted_class, confidence, probabilities,
+ *      gradcam_url, model_used, computational_time_ms
  *    }
  *  }
  */
-router.post('/:imageId', validateImageId, (req, res, next) => {
+
+const express  = require('express');
+const { v4: uuidv4 } = require('uuid');
+const fs       = require('fs');
+const path     = require('path');
+const FormData = require('form-data');
+const axios    = require('axios');
+const router   = express.Router();
+
+const db       = require('../database/db');
+const config   = require('../config');
+const { validateImageId } = require('../middleware/validateRequest');
+const { startTimer }      = require('../utils/timer');
+const logger   = require('../utils/logger');
+
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+
+router.post('/:imageId', validateImageId, async (req, res, next) => {
   const timer = startTimer();
   try {
     const { imageId } = req.params;
+    const rawPath     = req.imageRecord.raw_path;   // absolute path from DB
 
-    // Confirm feature extraction has been done
-    const featureRow = db
-      .prepare('SELECT * FROM features WHERE image_id = ?')
-      .get(imageId);
+    // ── Validate the image file exists on disk ────────────────────────────────
+    if (!fs.existsSync(rawPath)) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 404, message: `Raw image file not found on disk: ${rawPath}` },
+      });
+    }
 
-    if (!featureRow) {
-      return res.status(422).json({
+    logger.info(`[CLASSIFY] Forwarding imageId=${imageId} to AI service — ${rawPath}`);
+
+    // ── Build multipart/form-data for FastAPI ─────────────────────────────────
+    const form = new FormData();
+    form.append('image', fs.createReadStream(rawPath), {
+      filename:    path.basename(rawPath),
+      contentType: 'image/jpeg',
+    });
+    form.append('generate_gradcam', 'true');
+
+    // ── Call FastAPI POST /api/v1/predict ─────────────────────────────────────
+    let aiResponse;
+    try {
+      aiResponse = await axios.post(
+        `${AI_SERVICE_URL}/api/v1/predict`,
+        form,
+        {
+          headers: form.getHeaders(),
+          timeout: 120_000,   // model inference can take a moment on CPU
+        }
+      );
+    } catch (axiosErr) {
+      const detail =
+        axiosErr.response?.data?.detail ||
+        axiosErr.response?.data?.error?.message ||
+        axiosErr.message;
+      logger.error(`[CLASSIFY] AI service error for ${imageId}: ${detail}`);
+      return res.status(502).json({
         success: false,
         error: {
-          code:    422,
-          message: `Features not extracted for image ${imageId}. Run POST /api/features/${imageId} first.`,
+          code: 502,
+          message: `AI service prediction failed: ${detail}`,
         },
       });
     }
 
-    // ── PLACEHOLDER prediction ────────────────────────────────────────────────
-    // Real prediction from ednSvm.predict() in classifier implementation phase
-    const prediction  = 'abnormal';   // "normal" | "abnormal"
-    const confidence  = 0.9412;       // float [0, 1]
+    const aiData = aiResponse.data?.data ?? aiResponse.data;
+
+    // aiData shape from FastAPI /predict:
+    // { class, confidence, probabilities, gradcam_path, model_used }
+    const predictedClass = aiData.class;
+    const confidence     = aiData.confidence;
+    const probabilities  = aiData.probabilities ?? {};
+    const modelUsed      = aiData.model_used ?? 'unknown';
+    const gradcamAbsPath = aiData.gradcam_path ?? null;   // absolute path on AI service
+
+    // ── Convert Grad-CAM absolute path to a static URL ────────────────────────
+    // AI service saves to:  <ai-service>/gradcam_output/<image_id>.png
+    // Express serves:       /gradcam/<filename>   (added in server.js)
+    let gradcamUrl = null;
+    if (gradcamAbsPath) {
+      gradcamUrl = `/gradcam/${path.basename(gradcamAbsPath)}`;
+    }
 
     timer.stop();
     const computationalTimeMs = timer.elapsedMs();
     const now = new Date().toISOString();
 
-    // Upsert result record
+    // ── Persist result to database ─────────────────────────────────────────────
     const existing = db
       .prepare('SELECT id FROM results WHERE image_id = ?')
       .get(imageId);
@@ -66,29 +116,43 @@ router.post('/:imageId', validateImageId, (req, res, next) => {
     if (existing) {
       db.prepare(`
         UPDATE results
-        SET prediction=?, confidence=?, computational_time=?
-        WHERE image_id=?
-      `).run(prediction, confidence, computationalTimeMs, imageId);
+           SET prediction=?, confidence=?, gradcam_path=?, computational_time=?,
+               probabilities=?, model_used=?
+         WHERE image_id=?
+      `).run(
+        predictedClass, confidence, gradcamAbsPath, computationalTimeMs,
+        JSON.stringify(probabilities), modelUsed,
+        imageId
+      );
     } else {
       db.prepare(`
         INSERT INTO results
           (id, image_id, prediction, confidence,
            accuracy, sensitivity, specificity,
-           psnr, jaccard, ber, computational_time, created_at)
-        VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)
-      `).run(uuidv4(), imageId, prediction, confidence, computationalTimeMs, now);
+           psnr, jaccard, ber, computational_time,
+           gradcam_path, probabilities, model_used, created_at)
+        VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?)
+      `).run(
+        uuidv4(), imageId, predictedClass, confidence, computationalTimeMs,
+        gradcamAbsPath, JSON.stringify(probabilities), modelUsed, now
+      );
     }
 
-    logger.info(`[CLASSIFY] imageId=${imageId} | prediction=${prediction} | confidence=${confidence} (placeholder)`);
+    logger.info(
+      `[CLASSIFY] imageId=${imageId} | class=${predictedClass} | ` +
+      `confidence=${confidence} | gradcam=${gradcamUrl} | ${computationalTimeMs.toFixed(1)}ms`
+    );
 
     return res.status(200).json({
       success: true,
       data: {
         image_id:             imageId,
-        prediction,
+        predicted_class:      predictedClass,
         confidence,
-        computational_time_ms: computationalTimeMs,
-        status:               'placeholder — EDN-SVM classifier not yet implemented',
+        probabilities,
+        gradcam_url:          gradcamUrl,
+        model_used:           modelUsed,
+        computational_time_ms: parseFloat(computationalTimeMs.toFixed(2)),
         next_step:            `GET /api/results/${imageId}`,
       },
     });

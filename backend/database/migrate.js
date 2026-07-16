@@ -78,6 +78,20 @@ function runMigrations() {
     logger.error(`[DB] Migration failed: ${err.message}`);
     throw err;
   }
+
+  // ── Additive column migrations (ALTER TABLE — idempotent via try/catch) ────
+  const alterMigrations = [
+    `ALTER TABLE results ADD COLUMN gradcam_path TEXT`,
+    `ALTER TABLE results ADD COLUMN probabilities TEXT`,
+    `ALTER TABLE results ADD COLUMN model_used TEXT`,
+  ];
+  for (const stmt of alterMigrations) {
+    try {
+      db.prepare(stmt).run();
+    } catch (_) {
+      // Column already exists — safe to ignore
+    }
+  }
 }
 
 // ─── Table existence helpers ──────────────────────────────────────────────────

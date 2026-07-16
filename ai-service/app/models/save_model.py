@@ -88,18 +88,19 @@ def save_keras_model(
 
     # ── Primary artefact ──────────────────────────────────────────────────────
     if save_format == "tf":
-        model_path = model_dir  # SavedModel is a directory
+        # Keras 3: use the native .keras format (replaces SavedModel for Keras 3+)
+        model_path = model_dir / f"{name}.keras"
         try:
-            model.save(str(model_path), save_format="tf")
+            model.save(str(model_path))
         except Exception as exc:
             raise RuntimeError(
-                f"Failed to save model '{name}' as SavedModel: {exc}"
+                f"Failed to save model '{name}' as .keras: {exc}"
             ) from exc
-        logger.info(f"Model '{name}' saved as SavedModel → {model_path}")
+        logger.info(f"Model '{name}' saved as .keras → {model_path}")
     else:
         model_path = model_dir / f"{name}.h5"
         try:
-            model.save(str(model_path), save_format="h5")
+            model.save(str(model_path))
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to save model '{name}' as HDF5: {exc}"
@@ -109,14 +110,8 @@ def save_keras_model(
     # ── Optional .h5 copy (when primary is SavedModel) ────────────────────────
     h5_path_str = ""
     if save_format == "tf" and also_save_h5:
-        h5_path = model_dir / f"{name}.h5"
-        try:
-            model.save(str(h5_path), save_format="h5")
-            h5_path_str = str(h5_path)
-            logger.info(f"Also saved HDF5 copy → {h5_path}")
-        except Exception as exc:
-            # Non-fatal — log and continue
-            logger.warning(f"Could not save HDF5 copy for '{name}': {exc}")
+        # .keras is already the native format; skip legacy h5 copy
+        h5_path_str = str(model_path)
 
     # ── Metadata JSON ─────────────────────────────────────────────────────────
     info_path = model_dir / "model_info.json"

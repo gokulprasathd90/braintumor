@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS results (
   jaccard             REAL,
   ber                 REAL,
   computational_time  REAL,
+  gradcam_path        TEXT,
+  probabilities       TEXT,
+  model_used          TEXT,
   created_at          TEXT NOT NULL,
   FOREIGN KEY (image_id) REFERENCES images(id)
 );

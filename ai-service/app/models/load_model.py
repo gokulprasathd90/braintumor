@@ -34,9 +34,10 @@ def _resolve_model_path(model_name: str) -> Path:
 
     Search order
     ------------
-    1. ``saved_models/<model_name>/``          — TF SavedModel directory
-    2. ``saved_models/<model_name>.h5``        — legacy HDF5 file
-    3. ``saved_models/<model_name>/<model_name>.h5`` — h5 inside sub-dir
+    1. ``saved_models/<model_name>/<model_name>.keras`` — Keras 3 native format
+    2. ``saved_models/<model_name>/``                   — TF SavedModel directory
+    3. ``saved_models/<model_name>.h5``                 — legacy flat HDF5 file
+    4. ``saved_models/<model_name>/<model_name>.h5``    — h5 inside sub-dir
 
     Raises
     ------
@@ -45,17 +46,27 @@ def _resolve_model_path(model_name: str) -> Path:
     """
     base: Path = settings.saved_models_dir
 
-    # Option 1 — SavedModel directory (contains saved_model.pb)
+    # Option 1 — Keras 3 native .keras file (preferred)
+    keras_nested = base / model_name / f"{model_name}.keras"
+    if keras_nested.is_file():
+        return keras_nested
+
+    # Option 2 — flat .keras file
+    keras_flat = base / f"{model_name}.keras"
+    if keras_flat.is_file():
+        return keras_flat
+
+    # Option 3 — SavedModel directory (contains saved_model.pb)
     saved_model_dir = base / model_name
     if saved_model_dir.is_dir() and (saved_model_dir / "saved_model.pb").exists():
         return saved_model_dir
 
-    # Option 2 — flat .h5 file
+    # Option 4 — flat .h5 file
     h5_flat = base / f"{model_name}.h5"
     if h5_flat.is_file():
         return h5_flat
 
-    # Option 3 — .h5 nested inside sub-directory
+    # Option 5 — .h5 nested inside sub-directory
     h5_nested = base / model_name / f"{model_name}.h5"
     if h5_nested.is_file():
         return h5_nested
@@ -109,13 +120,15 @@ def load_keras_model(model_name: Optional[str] = None) -> tf.keras.Model:
 
     # ── Validate input shape ──────────────────────────────────────────────────
     expected_shape = settings.input_shape  # (H, W, C)
-    actual_shape   = tuple(model.input_shape[1:])  # strip batch dim
-
-    if actual_shape != expected_shape:
-        logger.warning(
-            f"Model '{name}' input shape {actual_shape} does not match "
-            f"config shape {expected_shape}. Proceeding — verify your config."
-        )
+    try:
+        actual_shape = tuple(model.input_shape[1:])  # strip batch dim
+        if actual_shape != expected_shape:
+            logger.warning(
+                f"Model '{name}' input shape {actual_shape} does not match "
+                f"config shape {expected_shape}. Proceeding — verify your config."
+            )
+    except Exception:
+        pass  # Some Keras 3 models don't expose input_shape at top level
 
     _model_cache[name] = model
     total_params = model.count_params()

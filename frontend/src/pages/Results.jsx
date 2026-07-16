@@ -66,6 +66,9 @@ export default function Results() {
     );
   }
 
+  // ── Pipeline incomplete ───────────────────────────────────────────────────
+  const pipelineComplete = resultData?.pipeline_complete;
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto space-y-6">
@@ -87,35 +90,74 @@ export default function Results() {
         {/* Error */}
         {error && <ErrorMessage message={error} onRetry={fetchData} />}
 
-        {/* Results */}
-        {!isLoading && !error && resultData && (
+        {/* Pipeline incomplete */}
+        {!isLoading && !error && resultData && !pipelineComplete && (
+          <div className="card text-center py-10 space-y-3">
+            <p className="text-pipeline-600 font-medium">Pipeline not yet complete</p>
+            <p className="text-pipeline-400 text-sm">
+              The classification step has not finished. Go back and run the full pipeline.
+            </p>
+            <Button variant="primary" onClick={() => navigate('/detect')}>
+              ← Back to Detection
+            </Button>
+          </div>
+        )}
+
+        {/* Full results */}
+        {!isLoading && !error && resultData && pipelineComplete && (
           <div className="space-y-6">
 
             {/* 1. Classification result */}
             <ResultCard
-              prediction={resultData.result?.prediction ?? resultData.prediction}
-              confidence={resultData.result?.confidence ?? resultData.confidence}
+              predictedClass={resultData.result?.predicted_class}
+              confidence={resultData.result?.confidence}
+              probabilities={resultData.result?.probabilities}
+              modelUsed={resultData.result?.model_used}
             />
 
-            {/* 2. Pipeline images */}
+            {/* 2. Grad-CAM heatmap */}
+            {resultData.result?.gradcam_url && (
+              <div className="card space-y-3">
+                <h2 className="section-title">Grad-CAM Heatmap</h2>
+                <p className="text-xs text-pipeline-500">
+                  Gradient-weighted Class Activation Map — highlights regions that influenced the prediction.
+                </p>
+                <div className="rounded-lg overflow-hidden border border-pipeline-200 bg-black max-w-sm">
+                  <img
+                    src={resultData.result.gradcam_url}
+                    alt="Grad-CAM heatmap"
+                    className="w-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className="hidden h-44 items-center justify-center text-xs text-pipeline-400">
+                    Grad-CAM image not available
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Pipeline images */}
             <div className="card">
               <h2 className="section-title">Pipeline Images</h2>
               <ImageViewer paths={resultData.paths ?? {}} />
             </div>
 
-            {/* 3. GLCM features */}
+            {/* 4. GLCM features */}
             <div className="card">
               <h2 className="section-title">Extracted GLCM Features</h2>
               <FeatureTable features={resultData.features} />
             </div>
 
-            {/* 4. Evaluation metrics */}
+            {/* 5. Evaluation metrics */}
             <div className="card">
               <h2 className="section-title">Evaluation Metrics</h2>
               <MetricsTable metrics={resultData.metrics} />
             </div>
 
-            {/* 5. Comparison charts */}
+            {/* 6. Comparison charts */}
             {compareData && (
               <div>
                 <h2 className="section-title px-0 mb-4">Model Comparison (Figures 9–14)</h2>

@@ -22,6 +22,19 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
+      // Static assets served by Express (uploaded images, pipeline outputs, Grad-CAM)
+      '/uploads': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/processed': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/gradcam': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
     },
   },
   build: {
