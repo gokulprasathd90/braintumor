@@ -36,6 +36,57 @@ const logger   = require('../utils/logger');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
+/**
+ * Extract GLCM features via FastAPI and persist them.
+ * Called automatically before classification so the Results page
+ * always has features — even when the frontend skips POST /api/features.
+ */
+async function extractAndSaveFeatures(imageId, imagePath) {
+  try {
+    const form = new FormData();
+    form.append('image', fs.createReadStream(imagePath), {
+      filename:    path.basename(imagePath),
+      contentType: 'image/jpeg',
+    });
+    const resp = await axios.post(
+      `${AI_SERVICE_URL}/api/v1/glcm`,
+      form,
+      { headers: form.getHeaders(), timeout: 30_000 }
+    );
+    const feats = resp.data?.data ?? resp.data;
+    const now   = new Date().toISOString();
+    const existing = db.prepare('SELECT id FROM features WHERE image_id = ?').get(imageId);
+    if (existing) {
+      db.prepare(`
+        UPDATE features
+           SET entropy=?, correlation=?, energy=?, contrast=?,
+               mean=?, std_dev=?, variance=?
+         WHERE image_id=?
+      `).run(
+        feats.entropy, feats.correlation, feats.energy,
+        feats.contrast, feats.mean, feats.std_dev, feats.variance,
+        imageId
+      );
+    } else {
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare(`
+        INSERT INTO features
+          (id, image_id, entropy, correlation, energy, contrast,
+           mean, std_dev, variance, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        uuidv4(), imageId,
+        feats.entropy, feats.correlation, feats.energy,
+        feats.contrast, feats.mean, feats.std_dev, feats.variance, now
+      );
+    }
+    logger.info(`[CLASSIFY] GLCM auto-extracted for ${imageId}`);
+  } catch (err) {
+    // Non-fatal — log and continue with classification
+    logger.warn(`[CLASSIFY] GLCM auto-extraction skipped for ${imageId}: ${err.message}`);
+  }
+}
+
 router.post('/:imageId', validateImageId, async (req, res, next) => {
   const timer = startTimer();
   try {
@@ -51,6 +102,15 @@ router.post('/:imageId', validateImageId, async (req, res, next) => {
     }
 
     logger.info(`[CLASSIFY] Forwarding imageId=${imageId} to AI service — ${rawPath}`);
+
+    // ── Auto-extract GLCM features (use enhanced image if preprocessed) ───────
+    const processedRow = db
+      .prepare('SELECT enhanced_path, resized_path FROM processed_images WHERE image_id = ?')
+      .get(imageId);
+    const featureImagePath = processedRow?.enhanced_path
+      || processedRow?.resized_path
+      || rawPath;
+    await extractAndSaveFeatures(imageId, featureImagePath);
 
     // ── Build multipart/form-data for FastAPI ─────────────────────────────────
     const form = new FormData();

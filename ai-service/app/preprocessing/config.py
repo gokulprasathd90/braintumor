@@ -103,9 +103,14 @@ class PreprocessConfig:
     clahe_tile_grid_size: Tuple[int, int] = (8, 8)
 
     # ── Normalisation ─────────────────────────────────────────────────────────
-    normalise: bool = True
-    norm_mean: Tuple[float, float, float] = IMAGENET_MEAN
-    norm_std:  Tuple[float, float, float] = IMAGENET_STD
+    # EfficientNetB3 (and all EfficientNet variants in Keras/TF) have an
+    # internal preprocessing layer that maps pixel values [0, 255] → [-1, 1].
+    # We therefore pass pixels in the range [0, 1] (simple /255 rescale) and
+    # the backbone handles the rest.  Do NOT apply ImageNet z-score here —
+    # doing so double-normalises the input and completely corrupts predictions.
+    normalise: bool = False          # simple /255 rescale only
+    norm_mean: Tuple[float, float, float] = IMAGENET_MEAN  # kept for legacy shims
+    norm_std:  Tuple[float, float, float] = IMAGENET_STD   # kept for legacy shims
 
     # ── Quality thresholds ────────────────────────────────────────────────────
     min_width: int = 32

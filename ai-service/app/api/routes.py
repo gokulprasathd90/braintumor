@@ -5,6 +5,7 @@ Endpoints
 ---------
 GET  /health                              Liveness probe.
 POST /predict                             Run inference on an MRI image.
+POST /glcm                                Extract GLCM texture features from an image.
 POST /train                               Train a model (synchronous, legacy).
 POST /evaluate                            Evaluate a trained model.
 GET  /dataset/info                        Return saved dataset metadata.
@@ -1812,6 +1813,74 @@ def active_model_endpoint(
             "cache_stats":   stats,
         },
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GLCM Feature Extraction
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class GLCMResponse(BaseModel):
+    success: bool
+    data: Dict[str, Any]
+
+
+@router.post(
+    "/glcm",
+    response_model=GLCMResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Extract GLCM texture features from an MRI image",
+    tags=["Features"],
+)
+@limiter.limit(limits.PREDICTION)
+async def glcm_endpoint(
+    request: Request,
+    image: UploadFile = File(..., description="MRI scan — JPEG or PNG"),
+    current_user: Optional[UserInDB] = Depends(optional_auth),
+) -> GLCMResponse:
+    """
+    Compute 7 GLCM texture features (Eq. 8–14) from the uploaded image.
+
+    **Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "entropy":     5.123,
+        "correlation": 0.894,
+        "energy":      0.041,
+        "contrast":    18.32,
+        "mean":        3.24,
+        "std_dev":     1.89,
+        "variance":    3.58
+      }
+    }
+    ```
+    """
+    if image.content_type not in ("image/jpeg", "image/png"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type '{image.content_type}'. Only JPEG and PNG are accepted.",
+        )
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty.",
+        )
+
+    try:
+        from app.utils.glcm_features import extract_glcm_features
+        features = extract_glcm_features(image_bytes)
+    except Exception as exc:
+        logger.exception("GLCM extraction failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"GLCM extraction failed: {exc}",
+        )
+
+    return GLCMResponse(success=True, data=features)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
