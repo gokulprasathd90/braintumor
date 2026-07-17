@@ -1,0 +1,3 @@
+# Runtime upload directory managed by Multer.
+# Files saved here temporarily when users upload MRI images via the API.
+# Excluded from git via .gitignore.

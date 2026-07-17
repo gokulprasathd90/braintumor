@@ -1,0 +1,159 @@
+{
+  "project": "Brain Tumour Detection",
+  "version": "1.0.0",
+  "release_date": "2026-07-14",
+  "build_timestamp": "2026-07-14T17:32:05Z",
+  "release_type": "stable",
+  "git_commit": "57c9a0c",
+  "git_branch": "main",
+  "git_tag": "v1.0.0",
+  "package_name": "brain-tumor-detection-v1.0.0",
+  "archive_format": "tar.gz",
+  "license": "MIT",
+  "repository": "https://github.com/your-org/brain-tumor-detection",
+  "checksums": {},
+  "components": {
+    "ai_service": {
+      "language": "Python",
+      "framework": "FastAPI + TensorFlow",
+      "python_version": "3.12",
+      "source_dir": "ai-service/",
+      "dockerfile": "ai-service/Dockerfile",
+      "entry_point": "app.main:app",
+      "port": 8000,
+      "key_dependencies": [
+        "fastapi==0.115.5",
+        "tensorflow==2.20.0",
+        "python-jose==3.3.0",
+        "slowapi==0.1.9",
+        "pillow==11.0.0",
+        "opencv-python==4.10.0.84",
+        "tf-explain==0.3.1",
+        "loguru==0.7.2",
+        "pydantic-settings==2.6.1"
+      ]
+    },
+    "backend": {
+      "language": "JavaScript",
+      "framework": "Node.js + Express",
+      "node_version": "20 LTS",
+      "source_dir": "backend/",
+      "dockerfile": "backend/Dockerfile",
+      "entry_point": "server.js",
+      "port": 5000,
+      "key_dependencies": [
+        "express@4.21",
+        "better-sqlite3",
+        "multer",
+        "axios",
+        "cors",
+        "helmet",
+        "morgan",
+        "dotenv"
+      ]
+    },
+    "frontend": {
+      "language": "TypeScript",
+      "framework": "React 18 + Vite 5",
+      "node_version": "20 LTS",
+      "source_dir": "frontend/",
+      "build_output": "frontend/dist/",
+      "dockerfile": "frontend/Dockerfile",
+      "port": 3000,
+      "key_dependencies": [
+        "react@18",
+        "react-dom@18",
+        "vite@5",
+        "typescript@5.3",
+        "tailwindcss@3.4",
+        "recharts@2.12",
+        "axios",
+        "react-router-dom"
+      ]
+    }
+  },
+  "infrastructure": {
+    "container_orchestration": "Docker Compose v2",
+    "compose_files": [
+      "docker/docker-compose.yml",
+      "docker/docker-compose.dev.yml",
+      "docker/docker-compose.prod.yml"
+    ],
+    "reverse_proxy": "Nginx",
+    "ci_cd": "GitHub Actions",
+    "workflows": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/cd.yml",
+      ".github/workflows/release.yml"
+    ]
+  },
+  "documentation": {
+    "files": [
+      "README.md",
+      "CHANGELOG.md",
+      "CONTRIBUTING.md",
+      "CODE_OF_CONDUCT.md",
+      "SECURITY.md",
+      "RELEASE_CHECKLIST.md",
+      "LICENSE",
+      "docs/api_reference.md",
+      "docs/architecture.md",
+      "docs/deployment.md",
+      "docs/developer_guide.md",
+      "docs/faq.md",
+      "docs/installation.md",
+      "docs/performance.md",
+      "docs/release_notes.md",
+      "docs/troubleshooting.md",
+      "docs/user_guide.md",
+      "docs/authentication_architecture.md",
+      "docs/cicd-guide.md",
+      "docs/docker-guide.md",
+      "docs/production-checklist.md",
+      "docs/project_architecture.md"
+    ]
+  },
+  "scripts": {
+    "files": [
+      "scripts/deploy.sh",
+      "scripts/deploy.ps1",
+      "scripts/backup.sh",
+      "scripts/restore.sh",
+      "scripts/validate-env.sh",
+      "scripts/validate-env.ps1",
+      "scripts/bump-version.sh",
+      "scripts/package_release.sh",
+      "scripts/package_release.ps1"
+    ]
+  },
+  "test_summary": {
+    "ai_service": {
+      "framework": "pytest",
+      "test_count": 1100,
+      "status": "passing"
+    },
+    "backend": {
+      "framework": "Jest",
+      "test_count": 112,
+      "status": "passing"
+    },
+    "frontend": {
+      "framework": "Vitest",
+      "test_count": 280,
+      "status": "passing"
+    },
+    "total": 1492
+  },
+  "docker_images": [
+    "ghcr.io/your-org/brain-tumor-detection/ai-service:1.0.0",
+    "ghcr.io/your-org/brain-tumor-detection/ai-service:latest",
+    "ghcr.io/your-org/brain-tumor-detection/backend:1.0.0",
+    "ghcr.io/your-org/brain-tumor-detection/backend:latest",
+    "ghcr.io/your-org/brain-tumor-detection/frontend:1.0.0",
+    "ghcr.io/your-org/brain-tumor-detection/frontend:latest"
+  ],
+  "breaking_changes": [],
+  "known_issues": [],
+  "upgrade_notes": "First stable release. No upgrade path from prior versions.",
+  "medical_disclaimer": "This software is for research and educational purposes only. It must not be used for clinical diagnosis or treatment decisions."
+}
