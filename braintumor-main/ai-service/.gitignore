@@ -1,0 +1,49 @@
+# Virtual environments (create manually — see setup_env.ps1 / setup_env.sh)
+.venv/
+venv/
+env/
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Environment / secrets
+.env
+
+# Logs and runtime output
+logs/
+*.log
+
+# Saved model weights (large binaries)
+saved_models/*
+!saved_models/.gitkeep
+
+# Dataset (large files — keep directory structure only)
+dataset/raw/*
+dataset/processed/*
+!dataset/raw/.gitkeep
+!dataset/processed/.gitkeep
+
+# Grad-CAM output images
+gradcam_output/*
+!gradcam_output/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/

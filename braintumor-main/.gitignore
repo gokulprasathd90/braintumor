@@ -1,0 +1,135 @@
+# ─── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# ─── Environment variables (contain secrets — never commit) ───────────────────
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+ai-service/.env
+# .env.example files ARE committed (safe defaults, no secrets)
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# MyPy / type-checkers
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# ─── Dataset — large binary files not tracked by git ─────────────────────────
+dataset/raw/
+dataset/processed/
+dataset/features/
+ai-service/dataset/raw/
+ai-service/dataset/processed/
+
+# ─── Model artefacts — binary weights not tracked by git ─────────────────────
+ai-service/saved_models/*/
+!ai-service/saved_models/.gitkeep
+backend/models/*.json
+backend/models/*.pkl
+!backend/models/.gitkeep
+
+# ─── Runtime outputs ──────────────────────────────────────────────────────────
+uploads/
+!uploads/.gitkeep
+ai-service/gradcam_output/
+!ai-service/gradcam_output/.gitkeep
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+ai-service/logs/
+
+# ─── Frontend build ───────────────────────────────────────────────────────────
+frontend/dist/
+frontend/.vite/
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+# Docker override files with local secrets
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ─── Editors & OS ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+# Test coverage
+coverage/
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# ─── Module 10: Deployment & CI/CD additions ──────────────────────────────────
+
+# Docker secrets (production secret files — never commit)
+docker/secrets/*.txt
+docker/secrets/*.key
+docker/secrets/*.pem
+# Keep the gitkeep and README
+!docker/secrets/.gitkeep
+!docker/secrets/README.md
+
+# Deployment backups
+.backups/
+
+# Deployment logs
+logs/deploy-*.log
+
+# Pre-commit
+.secrets.baseline
+
+# Production env templates with real values
+ai-service/.env.local
+*.env.local
+
+# Release artifacts
+RELEASE_NOTES.md
+CHANGELOG.md.tmp
+
+# Trivy scan results
+trivy-*.sarif
+
+# Docker compose local overrides
+docker/docker-compose.local.yml

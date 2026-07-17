@@ -1,0 +1,166 @@
+'use strict';
+
+// ─── Load environment variables FIRST before any other require ───────────────
+require('dotenv').config();
+
+const express = require('express');
+const cors    = require('cors');
+const helmet  = require('helmet');
+const morgan  = require('morgan');
+const path    = require('path');
+const fs      = require('fs');
+
+const config  = require('./config');
+const logger  = require('./utils/logger');
+const { runMigrations } = require('./database/migrate');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+
+// ─── Route imports ────────────────────────────────────────────────────────────
+const uploadRoute    = require('./api/upload.route');
+const preprocessRoute = require('./api/preprocess.route');
+const segmentRoute   = require('./api/segment.route');
+const featuresRoute  = require('./api/features.route');
+const classifyRoute  = require('./api/classify.route');
+const resultsRoute   = require('./api/results.route');
+const batchRoute     = require('./api/batch.route');
+const metricsRoute   = require('./api/metrics.route');
+const compareRoute   = require('./api/compare.route');
+
+// ─── Create Express app ───────────────────────────────────────────────────────
+const app = express();
+
+// ─── Security middleware — Helmet ─────────────────────────────────────────────
+// Sets HTTP security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+// crossOriginResourcePolicy: false allows serving static images to the frontend
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// Allows requests from the React frontend (configured in config.js / .env)
+app.use(cors({
+  origin:         config.cors.origin,
+  methods:        config.cors.methods,
+  allowedHeaders: config.cors.allowedHeaders,
+  credentials:    config.cors.credentials,
+}));
+
+// ─── HTTP request logger — Morgan ─────────────────────────────────────────────
+// In development: colourised "dev" format  → GET /api/upload 201 45ms
+// In production:  combined Apache log format
+const morganFormat = config.server.env === 'production' ? 'combined' : 'dev';
+
+// Create a Morgan stream that pipes into Winston so all logs go through one system
+const morganStream = {
+  write: (message) => logger.info(message.trim(), { module: 'HTTP' }),
+};
+
+app.use(morgan(morganFormat, { stream: morganStream }));
+
+// ─── Body parsers ─────────────────────────────────────────────────────────────
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// ─── Static file serving ──────────────────────────────────────────────────────
+// Serves uploaded MRI images and processed pipeline outputs as static assets.
+// URLs: /uploads/<filename>  and  /processed/<stage>/<filename>
+
+// Ensure all required directories exist before serving them
+const staticDirs = [
+  config.paths.uploadDir,
+  config.paths.resizedDir,
+  config.paths.enhancedDir,
+  config.paths.denoisedDir,
+  config.paths.segmentedDir,
+  config.paths.featuresDir,
+  config.paths.logsDir,
+];
+
+staticDirs.forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    logger.info(`[SERVER] Created directory: ${dir}`);
+  }
+});
+
+app.use('/uploads',   express.static(config.paths.uploadDir));
+app.use('/processed', express.static(config.paths.processedDir));
+
+// ─── Health check ─────────────────────────────────────────────────────────────
+// Simple liveness probe — returns 200 with server status and timestamp.
+app.get('/health', (_req, res) => {
+  res.status(200).json({
+    success:   true,
+    status:    'ok',
+    service:   'MRI Brain Tumor Detection API',
+    version:   '1.0.0',
+    timestamp: new Date().toISOString(),
+    environment: config.server.env,
+  });
+});
+
+// ─── API info ─────────────────────────────────────────────────────────────────
+// Lists all available endpoints — useful during development.
+app.get('/api', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    service: 'MRI Brain Tumor Detection API',
+    version: '1.0.0',
+    endpoints: [
+      { method: 'POST',  path: '/api/upload',              description: 'Upload MRI image (JPEG/PNG, max 10MB)' },
+      { method: 'POST',  path: '/api/preprocess/:imageId', description: 'Run ACEA + Median Filter preprocessing (Eq. 1–2)' },
+      { method: 'POST',  path: '/api/segment/:imageId',    description: 'Run Fuzzy C-Means segmentation (Eq. 3–7)' },
+      { method: 'POST',  path: '/api/features/:imageId',   description: 'Extract GLCM features (Eq. 8–14)' },
+      { method: 'POST',  path: '/api/classify/:imageId',   description: 'Run EDN-SVM classification (Algorithm 1)' },
+      { method: 'GET',   path: '/api/results/:imageId',    description: 'Get full pipeline result for an image' },
+      { method: 'POST',  path: '/api/batch',               description: 'Run complete pipeline in one call' },
+      { method: 'GET',   path: '/api/metrics',             description: 'Get model evaluation metrics (Eq. 28–32)' },
+      { method: 'GET',   path: '/api/compare',             description: 'Get EDN-SVM vs baseline comparison (Figures 9–14)' },
+    ],
+  });
+});
+
+// ─── Route registration ───────────────────────────────────────────────────────
+app.use('/api/upload',            uploadRoute);
+app.use('/api/preprocess',        preprocessRoute);
+app.use('/api/segment',           segmentRoute);
+app.use('/api/features',          featuresRoute);
+app.use('/api/classify',          classifyRoute);
+app.use('/api/results',           resultsRoute);
+app.use('/api/batch',             batchRoute);
+app.use('/api/metrics',           metricsRoute);
+app.use('/api/compare',           compareRoute);
+
+// ─── 404 handler ──────────────────────────────────────────────────────────────
+// Must come AFTER all routes, BEFORE errorHandler
+app.use(notFoundHandler);
+
+// ─── Global error handler ─────────────────────────────────────────────────────
+// Must be the LAST middleware — 4-parameter signature required by Express
+app.use(errorHandler);
+
+// ─── Database migrations ──────────────────────────────────────────────────────
+// Run BEFORE starting the server — idempotent (CREATE TABLE IF NOT EXISTS)
+try {
+  runMigrations();
+} catch (err) {
+  logger.error(`[SERVER] Migration failed on startup: ${err.message}`);
+  process.exit(1);
+}
+
+// ─── Start server ─────────────────────────────────────────────────────────────
+const { port, host } = config.server;
+
+app.listen(port, () => {
+  logger.info('─────────────────────────────────────────────────');
+  logger.info('  MRI Brain Tumor Detection API');
+  logger.info(`  Environment : ${config.server.env}`);
+  logger.info(`  Listening   : http://${host}:${port}`);
+  logger.info(`  Health      : http://${host}:${port}/health`);
+  logger.info(`  API info    : http://${host}:${port}/api`);
+  logger.info(`  Database    : ${config.database.path}`);
+  logger.info(`  Uploads     : ${config.paths.uploadDir}`);
+  logger.info('─────────────────────────────────────────────────');
+});
+
+module.exports = app; // exported for supertest in test files

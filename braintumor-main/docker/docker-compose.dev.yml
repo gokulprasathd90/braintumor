@@ -1,0 +1,92 @@
+# ─── docker/docker-compose.dev.yml ────────────────────────────────────────────
+#
+# Development overlay — extends docker-compose.yml with:
+#   - Source code bind-mounts for hot-reload
+#   - Debug environment variables
+#   - Relaxed health-check intervals (faster iteration)
+#   - Vite dev server exposed on port 5173
+#   - Mailhog for email testing (if needed)
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml \
+#                  -f docker/docker-compose.dev.yml up --build
+#
+# Or via Makefile:
+#   make docker-up-dev
+
+name: brain-tumor
+
+services:
+
+  # ── AI Service — development overrides ────────────────────────────────────
+  ai-service:
+    build:
+      target: runtime        # use the final runtime stage
+    environment:
+      AI_SERVICE_ENV:   development
+      AI_SERVICE_DEBUG: "true"
+      LOG_LEVEL:        DEBUG
+    volumes:
+      # Bind-mount source for live reload with uvicorn --reload
+      - ../ai-service/app:/app/app:ro
+    command:
+      - "python"
+      - "-m"
+      - "uvicorn"
+      - "app.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--reload"
+      - "--reload-dir"
+      - "/app/app"
+      - "--log-level"
+      - "debug"
+    healthcheck:
+      start_period: 30s
+      interval: 10s
+
+  # ── Backend — development overrides ───────────────────────────────────────
+  backend:
+    environment:
+      NODE_ENV:  development
+      LOG_LEVEL: debug
+    volumes:
+      # Bind-mount source — requires nodemon to be installed
+      - ../backend:/app:ro
+      - /app/node_modules          # anonymous volume prevents overwriting node_modules
+    command: ["node", "server.js"]
+    healthcheck:
+      start_period: 10s
+      interval: 10s
+
+  # ── Frontend — Vite dev server (hot module replacement) ───────────────────
+  # In development we run the Vite dev server directly instead of nginx.
+  # The built nginx image is NOT used for dev.
+  frontend:
+    image: node:20-slim
+    container_name: bt_frontend_dev
+    working_dir: /app
+    environment:
+      NODE_ENV:            development
+      VITE_API_BASE_URL:   "http://localhost:5000"
+      VITE_AI_SERVICE_URL: "http://localhost:8000"
+    volumes:
+      - ../frontend:/app:ro
+      - /app/node_modules
+    ports:
+      - "5173:5173"   # Vite default dev port
+      - "3000:3000"   # Also expose 3000 for convenience
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - app_network
+    depends_on:
+      backend:
+        condition: service_healthy

@@ -1,0 +1,24 @@
+# ─── ai-service/requirements-dev.txt ──────────────────────────────────────────
+# Development and CI/CD tooling — NOT installed in production Docker image.
+# Install with: pip install -r requirements-dev.txt
+
+# ─── Code quality ─────────────────────────────────────────────────────────────
+ruff==0.8.4            # fast linter + formatter (replaces flake8)
+black==24.10.0         # opinionated code formatter
+isort==5.13.2          # import sorter
+mypy==1.13.0           # static type checker
+pre-commit==4.0.1      # git hook manager
+
+# ─── Testing extras ───────────────────────────────────────────────────────────
+pytest-cov==6.0.0      # coverage plugin for pytest
+pytest-mock==3.14.0    # mocker fixture
+httpx==0.27.2          # async HTTP client (TestClient backend)
+factory-boy==3.3.1     # test data factories
+
+# ─── Security scanning ────────────────────────────────────────────────────────
+bandit==1.8.0          # security linter
+pip-audit==2.7.3       # vulnerability scanner for installed packages
+
+# ─── Documentation ────────────────────────────────────────────────────────────
+mkdocs==1.6.1
+mkdocs-material==9.5.49

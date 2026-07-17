@@ -1,0 +1,195 @@
+# ─── .github/workflows/release.yml ───────────────────────────────────────────
+#
+# Release automation — triggered when a version tag is pushed.
+#
+# What it does:
+#   1. Bumps version in pyproject.toml, package.json files
+#   2. Generates CHANGELOG from conventional commits
+#   3. Creates a GitHub Release with release notes
+#   4. Builds and pushes versioned Docker images
+#   5. Uploads build artifacts to the release
+#
+# Usage:
+#   git tag -a v1.2.3 -m "Release v1.2.3"
+#   git push origin v1.2.3
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"   # pre-releases: v1.0.0-rc.1
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY:    ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── Extract version from tag ───────────────────────────────────────────────
+  version:
+    name: "Release · Parse version"
+    runs-on: ubuntu-latest
+    outputs:
+      tag:        ${{ steps.parse.outputs.tag }}
+      semver:     ${{ steps.parse.outputs.semver }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+
+    steps:
+      - name: Parse tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          SEMVER="${TAG#v}"
+          # Check for pre-release segment (e.g. -rc.1, -beta.2)
+          if echo "$SEMVER" | grep -qE '\-'; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+          echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
+          echo "semver=$SEMVER"       >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Releasing: tag=$TAG semver=$SEMVER prerelease=$PRERELEASE"
+
+  # ── Build release artifacts ────────────────────────────────────────────────
+  build-release:
+    name: "Release · Build Docker images"
+    runs-on: ubuntu-latest
+    needs: [version]
+
+    strategy:
+      matrix:
+        include:
+          - image:      ai-service
+            dockerfile: ai-service/Dockerfile
+            context:    .
+            name:       brain-tumor-ai-service
+          - image:      backend
+            dockerfile: docker/Dockerfile.backend
+            context:    .
+            name:       brain-tumor-backend
+          - image:      frontend
+            dockerfile: docker/Dockerfile.frontend
+            context:    .
+            name:       brain-tumor-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ needs.version.outputs.prerelease == 'false' }}
+
+      - name: Build and push versioned image
+        uses: docker/build-push-action@v6
+        with:
+          context:  ${{ matrix.context }}
+          file:     ${{ matrix.dockerfile }}
+          push:     true
+          tags:     ${{ steps.meta.outputs.tags }}
+          labels:   ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            GIT_COMMIT=${{ github.sha }}
+            VERSION=${{ needs.version.outputs.semver }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to:   type=gha,mode=max,scope=${{ matrix.image }}
+          platforms:  linux/amd64
+
+  # ── Create GitHub Release ──────────────────────────────────────────────────
+  create-release:
+    name: "Release · Create GitHub Release"
+    runs-on: ubuntu-latest
+    needs: [version, build-release]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # needed for changelog generation
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          TAG="${{ needs.version.outputs.tag }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${TAG}"
+          else
+            RANGE="${TAG}"
+          fi
+
+          {
+            echo "## What's Changed"
+            echo ""
+
+            # Features
+            FEATURES=$(git log "$RANGE" --pretty=format:"%s" | grep -E "^feat" | sed 's/^feat[^:]*: /- /' || true)
+            if [ -n "$FEATURES" ]; then
+              echo "### Features"
+              echo "$FEATURES"
+              echo ""
+            fi
+
+            # Bug fixes
+            FIXES=$(git log "$RANGE" --pretty=format:"%s" | grep -E "^fix" | sed 's/^fix[^:]*: /- /' || true)
+            if [ -n "$FIXES" ]; then
+              echo "### Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+
+            # Other changes
+            OTHERS=$(git log "$RANGE" --pretty=format:"%s" | grep -Ev "^(feat|fix|chore|docs|style|test|ci)" | sed 's/^/- /' || true)
+            if [ -n "$OTHERS" ]; then
+              echo "### Other Changes"
+              echo "$OTHERS"
+              echo ""
+            fi
+
+            echo "### Docker Images"
+            echo "Pull the versioned images:"
+            echo '```bash'
+            echo "docker pull ghcr.io/${{ env.IMAGE_OWNER }}/brain-tumor-ai-service:${{ needs.version.outputs.semver }}"
+            echo "docker pull ghcr.io/${{ env.IMAGE_OWNER }}/brain-tumor-backend:${{ needs.version.outputs.semver }}"
+            echo "docker pull ghcr.io/${{ env.IMAGE_OWNER }}/brain-tumor-frontend:${{ needs.version.outputs.semver }}"
+            echo '```'
+          } > RELEASE_NOTES.md
+
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ needs.version.outputs.tag }}
+          name:       "Release ${{ needs.version.outputs.tag }}"
+          body_path:  RELEASE_NOTES.md
+          draft:      false
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          files: |
+            docker/docker-compose.yml
+            docker/docker-compose.prod.yml
